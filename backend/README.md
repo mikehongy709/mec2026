@@ -1,6 +1,6 @@
 # RemnantMonitor backend
 
-For the optional simulator packet checks and duplicate protection, see [PACKETS.md](PACKETS.md).
+For the dashboard's simulator packet checks and duplicate protection, see [PACKETS.md](PACKETS.md).
 
 The backend is one FastAPI application. It stores mission state and incoming telemetry in SQLite at `backend/app.db`.
 
@@ -13,13 +13,13 @@ python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-In a second terminal, start the fake telemetry source:
+The current dashboard generates its own simulated packets and sends them to the packet-check endpoint before updating charts. It needs the backend running. The Python generator below is optional and feeds the older status API instead:
 
 ```sh
 python data_generator.py
 ```
 
-The generator sends one sample per second to FastAPI. The API stores each sample and the dashboard reads the latest persisted state. Use <http://localhost:8000/docs> for the API docs and <http://localhost:8000> for the dashboard.
+The Python generator sends one sample per second to the older `/api/telemetry` endpoint. Use <http://localhost:8000/docs> for the API docs and <http://localhost:8000> for the current dashboard.
 
 ## API
 

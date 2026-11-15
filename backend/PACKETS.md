@@ -1,9 +1,23 @@
-# Optional mission packet validation
+# Mission packet validation
 
-This is a separate backend ingestion path matching the group's simulator packet
-format. It does not change the frontend, its simulation, or the existing
-`/api/telemetry` and dashboard endpoints. The frontend does not call this endpoint
-yet; the teammate handling integration can connect it when ready.
+This backend ingestion path matches the group's simulator packet format. The
+frontend now sends packets here before adding readings to charts and alerts.
+The mission simulation, phase controls and existing `/api/telemetry` and dashboard
+endpoints keep their existing roles.
+
+Open the frontend through the backend server (normally `http://localhost:8000`).
+It uses the API on the same origin. A separate frontend server can set
+`window.REMNANT_API_BASE` to the backend origin before the page's inline script;
+opening the HTML as a file defaults to `http://localhost:8000`.
+
+Each page load creates a new stream ID. Packets queue during simulated dropouts
+or API failures and retain their original IDs for retry. Invalid packets and
+sequence conflicts increase the rejected count. Repeated deliveries increase
+the duplicate count without adding chart points. If the server stored a packet
+but its response was lost, the first successful retry still adds that reading
+once to this page. The queue keeps the existing 300-packet limit, dropping the
+oldest waiting packet when full. API failures keep the last validated values
+visible and marked stale; packets are never accepted locally as a fallback.
 
 Start the existing `app.main:app` backend normally. Startup creates a new
 `mission_packets` table without altering the existing mission tables.
@@ -75,3 +89,10 @@ Packet endpoint tests use temporary SQLite files and guard against accessing the
 shared demo database. They cover browser checksum examples, invalid packets,
 replay, run separation, concurrent requests, restart persistence, and compatibility
 with the existing mission API.
+
+The frontend client also has tests for delivery, retries, duplicates, invalid
+receipts and request timeouts. From the repository root, with Node installed:
+
+```sh
+node --test frontend/tests/packet-client.test.cjs
+```
