@@ -1,6 +1,9 @@
 # RemnantMonitor
 
-RemnantMonitor is a mission telemetry dashboard. FastAPI serves the frontend and stores telemetry, mission phase, communication state and checklist completion in SQLite. A separate Python generator supplies simulated readings.
+RemnantMonitor is a mission telemetry dashboard. FastAPI serves the frontend and stores telemetry, mission phase, communication state and checklist completion in SQLite. A separate Python generator supplies simulated readings. 
+
+## Frontend
+Open html file in Chrome browser
 
 ## Run locally
 
@@ -41,43 +44,3 @@ The response includes `phase`, `link`, `link_delay_seconds`, `started_at`, `elap
 
 FastAPI creates the tables in `backend/app.db` at startup and logs the exact database path. The separate Python generator POSTs one sample per second to `telemetry_samples`. The dashboard holds the last displayed readings during a simulated link dropout while incoming samples continue to be archived. It uses the API on its own server, including on non-default ports. When using a separate frontend development server, set `window.REMNANT_API_BASE` before the dashboard script or use `?api=http://localhost:8080` to choose the backend origin. Direct-file previews try the local API on port 8000, then port 8080, accepting only a valid dashboard response.
 
-The additional [packet-validation API](backend/PACKETS.md) remains available for future integrations. The current group dashboard does not call it or require `/api/config` or a WebSocket server.
-## Data freshness and validation
-
-If no displayed sample has arrived for more than five seconds, the dashboard marks the readings as stale and keeps the last known values visible. It also marks readings as stale when the simulated link is lost or the API cannot be reached. Before the first sample, it shows a waiting message. Both the backend and Python generator must be running for live readings.
-
-`telemetry_updated_at` is the receive time of the last sample delivered over the link; `telemetry_age_seconds` reports its age, and `telemetry_stale` indicates that it is missing, delayed, or disconnected. `updated_at` remains the time the API response was generated. Samples archived during a simulated dropout do not refresh the displayed readings or receive timestamp.
-
-It runs separately using `app.main:app` on port 8080 with `backend/data/remnant.db`. Its routes are not mounted in the dashboard server described above.
-
-## Automated checks
-
-The mission dashboard checks cover telemetry responses, saved phases and checklist completion, communications dropout and recovery, invalid input, the mission clock, and persistence after restarting the application. They use temporary SQLite databases and block connections to the shared demo database.
-
-The checks send samples through the new telemetry API directly, so the data generator does not need to be running. They also verify that reading the dashboard does not generate samples, incoming data is archived during a dropout, and older telemetry archives upgrade without losing readings.
-
-From the repository root, using your backend Python environment:
-
-```sh
-cd backend
-python -m pip install -r requirements-dev.txt
-python -m unittest discover -s tests -p "test_mission_dashboard.py" -v
-```
-
-To run all backend checks, including the separate inventory API:
-
-```sh
-python -m unittest discover -s tests -v
-```
-
-Backend checks exercise packet validation, duplicate protection and compatibility with the mission API using temporary databases. No running server, browser, or shared demo database is required.
-
-With Node installed, the frontend checks include JavaScript syntax validation to catch unresolved merge markers:
-
-```sh
-node --test frontend/tests/*.test.cjs
-```
-
-The legacy `uvicorn main:app` entry point is a compatibility alias for the same `app.main:app` application. The separate inventory prototype has been removed.
-
-The database defaults to `backend/app.db`. Set `REMNANT_DB_PATH` to use another SQLite file, for example an isolated local preview. The application logs the selected path on startup.
