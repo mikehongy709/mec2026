@@ -119,16 +119,26 @@
       </div>
     </div>
   </div>
+  <script src="./api-connection.js"></script>
   <script>
-    const apiBase = window.REMNANT_API_BASE ?? (location.protocol === "file:" ? "http://localhost:8000" : "");
+    const apiCandidates = dashboardApiCandidates(location.protocol,
+      window.REMNANT_API_BASE ?? new URLSearchParams(location.search).get("api"));
+    let apiBase = apiCandidates[0], apiReady = apiCandidates.length === 1, apiConnection;
     const state = { dashboard: null, clockUpdatedAt: Date.now(), clockElapsed: 0, requestPending: false, apiUnavailable: false };
     const $ = id => document.getElementById(id);
 
     async function api(path, options = {}) {
+      if (!apiReady) {
+        // Share discovery between polling and any control clicked during startup.
+        apiConnection ??= findDashboardApi(apiCandidates).then(base => {
+          apiBase = base; apiReady = true;
+        }).finally(() => { apiConnection = null; });
+        await apiConnection;
+      }
       const response = await fetch(`${apiBase}/api${path}`, {
         cache: "no-store",
         ...options,
-        headers: { "Content-Type": "application/json", ...options.headers }
+        headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers }
       });
       if (!response.ok) {
         let message = `Request failed (${response.status})`;
@@ -214,7 +224,7 @@
       $("linkText").textContent = "Mission API unavailable";
       $("dropBtn").disabled = true;
       $("staleBanner").textContent = "Mission API unavailable. Displayed readings are last known values.";
-      $("staleBanner").classList.remove("d-none");
+      $("staleBanner").classList.toggle("d-none", !state.dashboard);
       draw();
     }
 
