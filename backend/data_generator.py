@@ -9,7 +9,6 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import random
 
-from app.telemetry import generate_readings, initial_readings
 
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else 0
