@@ -88,7 +88,6 @@
           <div class="ms-auto d-flex align-items-center gap-2">
             <span class="status-dot status-dot-animated bg-success" id="linkDot"></span><span
               id="linkText">Connecting</span>
-            <button class="btn btn-outline-warning ms-2" id="dropBtn" disabled>Simulate comms dropout</button>
           </div>
         </div>
         <div class="alert alert-warning d-none" id="staleBanner">Communications lost. Showing last known values; updates
@@ -201,8 +200,6 @@
           ? "No recent telemetry. Showing last known values; check that the data generator is running."
           : "Waiting for the first telemetry sample. Start the data generator to receive live readings.";
       $("staleBanner").classList.toggle("d-none", !stale);
-      $("dropBtn").textContent = dashboard.link ? "Simulate comms dropout" : "Restore link";
-      $("dropBtn").disabled = false;
       renderTiles(); renderChecklist(); draw();
     }
 
@@ -212,7 +209,6 @@
       $("apiError").classList.remove("d-none");
       $("linkDot").className = "status-dot bg-danger";
       $("linkText").textContent = "Mission API unavailable";
-      $("dropBtn").disabled = true;
       $("staleBanner").textContent = "Mission API unavailable. Displayed readings are last known values.";
       $("staleBanner").classList.remove("d-none");
       draw();
@@ -247,10 +243,6 @@
       if (!event.target.matches("input[type=checkbox]") || !state.dashboard) return;
       update("/checklist", { phase: state.dashboard.phase, item_index: Number(event.target.dataset.index), checked: event.target.checked });
     });
-    $("dropBtn").addEventListener("click", () => {
-      if (state.dashboard) update("/link", { link: !state.dashboard.link });
-    });
-
     setInterval(() => {
       const seconds = state.clockElapsed + Math.floor((Date.now() - state.clockUpdatedAt) / 1000);
       const pad = value => String(value).padStart(2, "0");
