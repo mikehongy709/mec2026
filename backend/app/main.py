@@ -47,7 +47,7 @@ def upgrade_telemetry_archive_schema() -> None:
 async def lifespan(_app: FastAPI):
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
-    upgrade_telemetry_archive_schema()
+    # upgrade_telemetry_archive_schema()
     logger.info("Mission dashboard SQLite database: %s", DATABASE_PATH)
     yield
 

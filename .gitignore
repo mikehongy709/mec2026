@@ -8,4 +8,5 @@ dist/
 backend/.venv*/
 __pycache__/
 *.py[cod]
+*.db
 backend/data/
