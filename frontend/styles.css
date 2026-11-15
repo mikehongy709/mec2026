@@ -1,0 +1,61 @@
+/* Tabler supplies layout, components, typography, colors, and spacing utilities.
+   Keep overrides limited to readability and Remnant-specific content. */
+:root[data-bs-theme="light"] {
+  --tblr-body-font-size: 1rem;
+  --tblr-body-bg: #edf0f4;
+  --tblr-bg-surface-secondary: #edf0f4;
+  --tblr-secondary: #536174;
+  --tblr-border-color: #d3dae3;
+  --tblr-border-color-translucent: #d3dae3;
+}
+
+html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
+button, input, select { touch-action: manipulation; }
+[data-icon] { display: inline-flex; flex-shrink: 0; align-items: center; }
+
+.remnant-brand { font-size: 1.5rem; }
+.remnant-brand .icon { width: 2rem; height: 2rem; }
+.sidebar-mission { margin: 1.5rem 1rem; padding-top: 1.5rem; }
+.sidebar-mission p { font-size: .875rem; }
+.remnant-team { flex-shrink: 0; }
+.team-copy { min-width: 0; font-size: .875rem; line-height: 1.5; }
+.team-copy > div { white-space: normal; overflow-wrap: anywhere; }
+
+/* The component and its palette come directly from Tabler's Card Gradient CSS. */
+.summary-card .summary-value { font-size: 2.25rem; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.summary-value small { margin-inline-start: .375rem; font-size: 1rem; font-weight: 400; color: var(--tblr-secondary); }
+.summary-detail { font-size: .875rem; }
+.summary-label { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .75rem; font-weight: 500; }
+
+.forecast-chart { min-width: 0; }
+.forecast-chart svg { display: block; width: 100%; height: auto; }
+.forecast-chart text { font-family: var(--tblr-body-font-family); }
+.priority-heading, .priority-action { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.priority-copy { min-width: 0; flex: 1; }
+.priority-action { margin-top: .75rem; }
+.priority-action strong { font-size: .875rem; font-weight: 500; }
+.inventory-table-secondary { font-size: .875rem; }
+.supply-days { min-width: 7rem; }
+.supply-days .progress { max-width: 7rem; margin-top: .5rem; }
+#inventory .table { min-width: 810px; }
+#inventory .table th { font-size: .75rem; }
+#inventory .table td { padding-top: 1rem; padding-bottom: 1rem; }
+
+.supply-dialog { width: min(480px, calc(100% - 2rem)); border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius-lg); color: var(--tblr-body-color); background: var(--tblr-bg-surface); box-shadow: var(--tblr-shadow-lg); }
+.supply-dialog::backdrop { background: rgba(24, 36, 51, .6); }
+.app-toast { position: fixed; z-index: 1100; bottom: 1rem; right: 1rem; max-width: min(440px, calc(100% - 2rem)); margin: 0; box-shadow: var(--tblr-shadow-lg); }
+.app-toast[hidden] { display: none; }
+.skip-link { position: fixed; top: -5rem; left: 1rem; z-index: 1200; padding: .75rem 1rem; color: var(--tblr-body-color); background: var(--tblr-bg-surface); }
+.skip-link:focus { top: 1rem; }
+
+@media (min-width: 992px) {
+  /* Native Tabler reserves the footer; only the menu and mission details scroll. */
+  .navbar-vertical .navbar-collapse { min-height: 0; }
+}
+@media (max-width: 575.98px) {
+  .summary-card .summary-value { font-size: 2rem; }
+  .priority-action { align-items: flex-start; flex-direction: column; }
+  .priority-action .btn { width: 100%; }
+  .page-header .btn-list .btn { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

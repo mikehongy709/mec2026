@@ -1,0 +1,11 @@
+# Installed dependencies and local generated files
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Local Python environments and generated inventory data
+backend/.venv*/
+__pycache__/
+*.py[cod]
+backend/data/
