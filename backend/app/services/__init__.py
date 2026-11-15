@@ -1,1 +1,1 @@
-"""Mission supply calculations."""
+"""Mission telemetry and dashboard logic."""

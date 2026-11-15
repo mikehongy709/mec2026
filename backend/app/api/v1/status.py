@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.database import get_db
 from app.repositories.status_repositories import MissionStatusRepository
 from app.schemas.mission import (
     ChecklistUpdate,

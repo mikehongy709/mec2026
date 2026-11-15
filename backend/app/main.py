@@ -1,60 +1,68 @@
-"""Application entry point: uvicorn app.main:app --app-dir backend."""
+"""The RemnantMonitor FastAPI application."""
 
 from contextlib import asynccontextmanager
-import os
+import logging
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import inspect, text
 
-from .database import build_engine, initialize_inventory
-from .routes.alerts import router as alerts_router
-from .routes.inventory import router as inventory_router
-
-
-DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "data" / "remnant.db"
+from app.api.v1.status import router as status_router
+from app.database import Base, DATABASE_PATH, engine
+from app.models.mission import MissionState, TelemetrySample  # Register tables.
 
 
-def create_app(database_path: str | Path | None = None) -> FastAPI:
-    """Allow tests and local runs to use their own SQLite database file."""
-    path = Path(
-        database_path
-        if database_path is not None
-        else os.environ.get("REMNANT_DB_PATH", DEFAULT_DATABASE_PATH)
-    ).resolve()
-    engine = build_engine(path)
-
-    @asynccontextmanager
-    async def lifespan(application: FastAPI):
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            initialize_inventory(engine)
-            yield
-        finally:
-            engine.dispose()
-
-    application = FastAPI(
-        title="Remnant Inventory API",
-        version="0.1.0",
-        description="Read inventory, review shortages, and update onboard quantities.",
-        lifespan=lifespan,
-    )
-    application.state.engine = engine
-
-    @application.exception_handler(RequestValidationError)
-    async def validation_error(_request: Request, error: RequestValidationError):
-        # Invalid input can contain NaN/Infinity. Echoing those values in the
-        # default error response causes JSON serialization to fail with HTTP 500.
-        details = [
-            {key: issue[key] for key in ("type", "loc", "msg")}
-            for issue in error.errors()
-        ]
-        return JSONResponse(status_code=422, content={"detail": details})
-
-    application.include_router(inventory_router)
-    application.include_router(alerts_router)
-    return application
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+logger = logging.getLogger(__name__)
 
 
-app = create_app()
+def upgrade_telemetry_archive_schema() -> None:
+    columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("telemetry_samples")
+    }
+    migrations = []
+    if "link" not in columns:
+        migrations.append(
+            'ALTER TABLE telemetry_samples ADD COLUMN "link" BOOLEAN NOT NULL DEFAULT 1'
+        )
+    if "checks" not in columns:
+        migrations.append(
+            'ALTER TABLE telemetry_samples ADD COLUMN "checks" JSON NOT NULL DEFAULT \'{}\''
+        )
+
+    if migrations:
+        with engine.begin() as connection:
+            for statement in migrations:
+                connection.execute(text(statement))
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    Base.metadata.create_all(bind=engine)
+    upgrade_telemetry_archive_schema()
+    logger.info("Mission dashboard SQLite database: %s", DATABASE_PATH)
+    yield
+
+
+app = FastAPI(
+    title="RemnantMonitor API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["null"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT"],
+    allow_headers=["*"],
+)
+
+app.include_router(status_router, prefix="/api")
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

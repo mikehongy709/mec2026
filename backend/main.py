@@ -1,7 +1,6 @@
-from contextlib import asynccontextmanager
-import logging
-from pathlib import Path
+"""Backward-compatible entry point; the FastAPI app lives in ``app.main``."""
 
+<<<<<<< HEAD
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -84,3 +83,8 @@ def create_app(database_engine: Engine | None = None) -> FastAPI:
 
 
 app = create_app()
+=======
+from app.main import app
+
+__all__ = ["app"]
+>>>>>>> 66754eedf0583cfd58aeeeb913448903dd2f5db3
