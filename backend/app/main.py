@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
@@ -54,6 +56,17 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(_request: Request, error: RequestValidationError):
+    # Do not echo rejected NaN/Infinity values, which would break JSON encoding.
+    details = [
+        {key: issue[key] for key in ("type", "loc", "msg")}
+        for issue in error.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": details})
+
 
 app.add_middleware(
     CORSMiddleware,

@@ -51,3 +51,12 @@ class MissionStatusRepository:
             .order_by(TelemetrySample.id.desc())
             .first()
         )
+
+    def get_latest_linked_sample(self) -> TelemetrySample | None:
+        """The last sample actually delivered to the dashboard, excluding outages."""
+        return (
+            self.db.query(TelemetrySample)
+            .filter(TelemetrySample.link.is_(True))
+            .order_by(TelemetrySample.id.desc())
+            .first()
+        )

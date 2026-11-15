@@ -120,8 +120,8 @@
     </div>
   </div>
   <script>
-    const apiBase = window.REMNANT_API_BASE ?? (location.port === "8000" ? "" : "http://localhost:8000");
-    const state = { dashboard: null, clockUpdatedAt: Date.now(), clockElapsed: 0, requestPending: false };
+    const apiBase = window.REMNANT_API_BASE ?? (location.protocol === "file:" ? "http://localhost:8000" : "");
+    const state = { dashboard: null, clockUpdatedAt: Date.now(), clockElapsed: 0, requestPending: false, apiUnavailable: false };
     const $ = id => document.getElementById(id);
 
     async function api(path, options = {}) {
@@ -156,7 +156,7 @@
         tile.querySelector(".val").textContent = m.value.toFixed(m.step < 0.1 ? 2 : 1);
         const h = m.history, lo = Math.min(...h), hi = Math.max(...h) || 1, rng = hi - lo || 1;
         tile.querySelector("polyline").setAttribute("points", h.map((y, i) => `${(i / (h.length - 1)) * 120},${36 - ((y - lo) / rng) * 32}`).join(" "));
-        tile.classList.toggle("stale", !state.dashboard.link);
+        tile.classList.toggle("stale", state.apiUnavailable || !state.dashboard.link || state.dashboard.telemetry_stale);
         if (m.value < m.minimum || m.value > m.maximum) alerts.push(`${m.name} is ${m.value.toFixed(1)} ${m.unit}, outside ${m.minimum} to ${m.maximum}`);
       });
       $("alerts").innerHTML = alerts.length
@@ -188,20 +188,34 @@
 
     function renderDashboard(dashboard) {
       state.dashboard = dashboard;
+      state.apiUnavailable = false;
       state.clockElapsed = dashboard.elapsed_seconds;
       state.clockUpdatedAt = Date.now();
       document.querySelectorAll(".phase-btn").forEach(button => button.classList.toggle("active", button.dataset.p === dashboard.phase));
-      $("linkDot").className = "status-dot status-dot-animated " + (dashboard.link ? "bg-success" : "bg-danger");
-      $("linkText").textContent = dashboard.link ? `Link stable, ${dashboard.link_delay_seconds.toFixed(1)}s one-way delay` : "Link lost";
-      $("staleBanner").classList.toggle("d-none", dashboard.link);
+      const stale = dashboard.telemetry_stale ?? !dashboard.link;
+      $("linkDot").className = "status-dot status-dot-animated " + (!dashboard.link ? "bg-danger" : stale ? "bg-warning" : "bg-success");
+      $("linkText").textContent = !dashboard.link ? "Link lost" : stale ? "Telemetry delayed" : `Link stable, ${dashboard.link_delay_seconds.toFixed(1)}s one-way delay`;
+      $("staleBanner").textContent = !dashboard.link
+        ? "Communications lost. Showing last known values; updates resume when the link returns."
+        : dashboard.telemetry_updated_at
+          ? "No recent telemetry. Showing last known values; check that the data generator is running."
+          : "Waiting for the first telemetry sample. Start the data generator to receive live readings.";
+      $("staleBanner").classList.toggle("d-none", !stale);
       $("dropBtn").textContent = dashboard.link ? "Simulate comms dropout" : "Restore link";
       $("dropBtn").disabled = false;
       renderTiles(); renderChecklist(); draw();
     }
 
     function showError(error) {
+      state.apiUnavailable = true;
       $("apiError").textContent = `Could not reach the mission API: ${error.message}`;
       $("apiError").classList.remove("d-none");
+      $("linkDot").className = "status-dot bg-danger";
+      $("linkText").textContent = "Mission API unavailable";
+      $("dropBtn").disabled = true;
+      $("staleBanner").textContent = "Mission API unavailable. Displayed readings are last known values.";
+      $("staleBanner").classList.remove("d-none");
+      draw();
     }
 
     async function refresh() {

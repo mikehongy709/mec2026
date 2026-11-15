@@ -11,6 +11,7 @@ METRIC_DEFINITIONS = [
 ]
 
 METRIC_IDS = frozenset(metric["id"] for metric in METRIC_DEFINITIONS)
+PERCENTAGE_METRIC_IDS = frozenset({"pwr", "o2"})
 
 
 def initial_readings() -> dict[str, float]:
@@ -19,8 +20,12 @@ def initial_readings() -> dict[str, float]:
 
 def generate_readings(previous: dict[str, float]) -> dict[str, float]:
     """Generate one random walk sample from the prior metric values."""
-    return {
-        metric["id"]: previous.get(metric["id"], metric["value"])
-        + random.uniform(-metric["step"], metric["step"])
-        for metric in METRIC_DEFINITIONS
-    }
+    readings = {}
+    for metric in METRIC_DEFINITIONS:
+        metric_id = metric["id"]
+        value = previous.get(metric_id, metric["value"]) + random.uniform(-metric["step"], metric["step"])
+        # Alert limits are separate: low-but-valid battery/oxygen must still alert.
+        if metric_id in PERCENTAGE_METRIC_IDS:
+            value = max(0.0, min(100.0, value))
+        readings[metric_id] = value
+    return readings
