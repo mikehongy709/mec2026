@@ -3,22 +3,187 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tabler Demo</title>
+  <title>RemnantMonitor</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.5/dist/css/tabler.min.css" />
+  <style>
+    :root { 
+        --tblr-primary: #0054a6; 
+        --tblr-primary-rgb: 0, 84, 166; 
+    }
+    .strip { 
+        display: flex; 
+        gap: 2px; 
+        height: 28px; 
+        align-items: stretch;
+    }
+    .strip i { 
+        flex: 1; 
+        border-radius: 1px; 
+        background: var(--tblr-success); 
+        min-width: 2px; 
+    }
+    .strip i.warn { 
+        background: var(--tblr-warning); 
+    }
+    .strip i.down { 
+        background: var(--tblr-danger); 
+    }
+    .strip i.none { 
+        background: var(--tblr-border-color); 
+    }
+    .svc-name { 
+        font-weight: 600; 
+    }
+    .table td { 
+        vertical-align: middle; 
+    }
+  </style>
 </head>
 <body>
-  <h1>Hello, Tabler!</h1>
+  <div class="page">
+    <header class="navbar navbar-expand-md d-print-none">
+      <div class="container-xl">
+        <span class="navbar-brand fw-bold">RemnantMonitor</span>
+        <div class="ms-auto d-flex align-items-center gap-3">
+          <span class="text-secondary small" id="updated">Updated just now</span>
+          <button class="btn btn-primary" id="refresh">Refresh</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-wrapper">
+      <div class="container-xl py-4">
+
+        <div class="card mb-4">
+          <div class="card-body d-flex align-items-center gap-3">
+            <span class="status-dot status-dot-animated" id="overallDot"></span>
+            <div>
+              <div class="h2 m-0" id="overallText"></div>
+              <div class="text-secondary" id="overallSub"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row row-cards mb-4">
+          <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+            <div class="text-secondary">Services up</div><div class="h1 m-0" id="kUp"></div></div></div></div>
+          <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+            <div class="text-secondary">Average uptime (90 days)</div><div class="h1 m-0" id="kUptime"></div></div></div></div>
+          <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+            <div class="text-secondary">Median response</div><div class="h1 m-0" id="kLatency"></div></div></div></div>
+          <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+            <div class="text-secondary">Open incidents</div><div class="h1 m-0" id="kInc"></div></div></div></div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header">
+            <h3 class="card-title">Services</h3>
+            <div class="card-actions">
+              <div class="btn-group" id="filter">
+                <button class="btn btn-sm active" data-f="all">All</button>
+                <button class="btn btn-sm" data-f="issues">Needs attention</button>
+              </div>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table card-table table-vcenter">
+              <thead><tr>
+                <th>Service</th><th>Status</th><th>Response</th><th>Uptime</th><th style="min-width:260px">Last 90 days</th>
+              </tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">Recent incidents</h3></div>
+          <div class="list-group list-group-flush" id="incidents"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.5/dist/js/tabler.min.js"></script>
-  <div class="btn-list">
-  <a href="#" class="btn btn-primary">Primary</a>
-  <a href="#" class="btn btn-secondary">Secondary</a>
-  <a href="#" class="btn btn-success">Success</a>
-  <a href="#" class="btn btn-warning">Warning</a>
-  <a href="#" class="btn btn-danger">Danger</a>
-  <a href="#" class="btn btn-info">Info</a>
-  <a href="#" class="btn btn-dark">Dark</a>
-  <a href="#" class="btn btn-light">Light</a>
-</div>
+  <script>
+    const services = [
+      { name: "API gateway",     url: "api.example.com",    status: "up",       ms: 84,  uptime: 99.98, seed: 1 },
+      { name: "Web app",         url: "app.example.com",    status: "up",       ms: 142, uptime: 99.95, seed: 2 },
+      { name: "Auth service",    url: "auth.example.com",   status: "degraded", ms: 611, uptime: 99.71, seed: 3 },
+      { name: "Database",        url: "db.internal",        status: "up",       ms: 12,  uptime: 100,   seed: 4 },
+      { name: "Job queue",       url: "queue.internal",     status: "down",     ms: null, uptime: 98.9, seed: 5 },
+      { name: "Email delivery",  url: "mail.example.com",   status: "up",       ms: 203, uptime: 99.88, seed: 6 }
+    ];
+    const incidents = [
+      { title: "Job queue not responding", service: "Job queue", state: "Investigating", when: "12 minutes ago", level: "danger" },
+      { title: "Slow token refresh", service: "Auth service", state: "Monitoring", when: "1 hour ago", level: "warning" },
+      { title: "Elevated email bounce rate", service: "Email delivery", state: "Resolved", when: "Yesterday", level: "success" }
+    ];
+
+    const label = { up: ["Operational", "success"], degraded: ["Degraded", "warning"], down: ["Down", "danger"] };
+    const $ = id => document.getElementById(id);
+
+    function strip(s) {
+      let x = s.seed * 9301, out = "";
+      for (let i = 0; i < 90; i++) {
+        x = (x * 49297 + 233280) % 233280;
+        const r = x / 233280;
+        let c = r > 0.97 ? "down" : r > 0.92 ? "warn" : "";
+        if (i > 86 && s.status === "down") c = "down";
+        if (i > 86 && s.status === "degraded") c = "warn";
+        out += `<i class="${c}"></i>`;
+      }
+      return `<div class="strip" role="img" aria-label="90-day status history for ${s.name}">${out}</div>`;
+    }
+
+    function renderRows(filter) {
+      const list = filter === "issues" ? services.filter(s => s.status !== "up") : services;
+      $("rows").innerHTML = list.map(s => {
+        const [t, c] = label[s.status];
+        return `<tr>
+          <td><div class="svc-name">${s.name}</div><div class="text-secondary small">${s.url}</div></td>
+          <td><span class="badge bg-${c}-lt">${t}</span></td>
+          <td>${s.ms === null ? "No response" : s.ms + " ms"}</td>
+          <td>${s.uptime.toFixed(2)}%</td>
+          <td>${strip(s)}</td></tr>`;
+      }).join("") || `<tr><td colspan="5" class="text-center text-secondary py-4">Everything is operational.</td></tr>`;
+    }
+
+    function renderSummary() {
+      const up = services.filter(s => s.status === "up").length;
+      const down = services.filter(s => s.status === "down").length;
+      const degraded = services.filter(s => s.status === "degraded").length;
+      const lat = services.filter(s => s.ms !== null).map(s => s.ms).sort((a, b) => a - b);
+      const open = incidents.filter(i => i.state !== "Resolved").length;
+      const lvl = down ? "danger" : degraded ? "warning" : "success";
+      $("overallDot").className = `status-dot status-dot-animated bg-${lvl}`;
+      $("overallText").textContent = down ? "Some services are down" : degraded ? "Some services are degraded" : "All services are operational";
+      $("overallSub").textContent = `${down} down, ${degraded} degraded, ${up} operational`;
+      $("kUp").textContent = `${up} of ${services.length}`;
+      $("kUptime").textContent = (services.reduce((a, s) => a + s.uptime, 0) / services.length).toFixed(2) + "%";
+      $("kLatency").textContent = lat[Math.floor(lat.length / 2)] + " ms";
+      $("kInc").textContent = open;
+    }
+
+    function renderIncidents() {
+      $("incidents").innerHTML = incidents.map(i => `
+        <div class="list-group-item d-flex align-items-center gap-3">
+          <span class="badge bg-${i.level}-lt">${i.state}</span>
+          <div class="flex-fill"><div class="fw-bold">${i.title}</div><div class="text-secondary small">${i.service}</div></div>
+          <div class="text-secondary small">${i.when}</div>
+        </div>`).join("");
+    }
+
+    $("filter").addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      document.querySelectorAll("#filter .btn").forEach(x => x.classList.toggle("active", x === b));
+      renderRows(b.dataset.f);
+    });
+    $("refresh").addEventListener("click", () => {
+      $("updated").textContent = "Updated " + new Date().toLocaleTimeString();
+    });
+
+    renderSummary(); renderRows("all"); renderIncidents();
+  </script>
 </body>
 </html>
-
