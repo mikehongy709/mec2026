@@ -1,23 +1,15 @@
 # Mission packet validation
 
-This backend ingestion path matches the group's simulator packet format. The
-frontend now sends packets here before adding readings to charts and alerts.
-The mission simulation, phase controls and existing `/api/telemetry` and dashboard
-endpoints keep their existing roles.
+This separate backend ingestion path matches the earlier packet simulator's
+format. The group has restored the status-API dashboard, which uses
+`/api/dashboard` and the Python telemetry generator. That dashboard does not call
+this packet endpoint or load `frontend/packet-client.js`.
 
-Open the frontend through the backend server (normally `http://localhost:8000`).
-It uses the API on the same origin. A separate frontend server can set
-`window.REMNANT_API_BASE` to the backend origin before the page's inline script;
-opening the HTML as a file defaults to `http://localhost:8000`.
-
-Each page load creates a new stream ID. Packets queue during simulated dropouts
-or API failures and retain their original IDs for retry. Invalid packets and
-sequence conflicts increase the rejected count. Repeated deliveries increase
-the duplicate count without adding chart points. If the server stored a packet
-but its response was lost, the first successful retry still adds that reading
-once to this page. The queue keeps the existing 300-packet limit, dropping the
-oldest waiting packet when full. API failures keep the last validated values
-visible and marked stale; packets are never accepted locally as a fallback.
+Packet validation and duplicate protection remain available for a later packet
+source. An integrating client should choose a new stream ID for each run, keep
+sequence numbers unchanged during retries, and wait for acceptance before
+displaying a packet. The helper in `frontend/packet-client.js` handles receipts,
+duplicate delivery and timeouts; it is not wired into the current frontend.
 
 Start the existing `app.main:app` backend normally. Startup creates a new
 `mission_packets` table without altering the existing mission tables.

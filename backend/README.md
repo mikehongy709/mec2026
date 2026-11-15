@@ -1,6 +1,6 @@
 # RemnantMonitor backend
 
-For the dashboard's simulator packet checks and duplicate protection, see [PACKETS.md](PACKETS.md).
+For the separate packet-validation endpoint and duplicate protection, see [PACKETS.md](PACKETS.md). The current dashboard uses the status and telemetry API below.
 
 The backend is one FastAPI application. It stores mission state and incoming telemetry in SQLite at `backend/app.db`.
 
@@ -13,13 +13,13 @@ python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-The current dashboard generates its own simulated packets and sends them to the packet-check endpoint before updating charts. It needs the backend running. The Python generator below is optional and feeds the older status API instead:
+In a second terminal, start the Python generator to send live simulated readings:
 
 ```sh
 python data_generator.py
 ```
 
-The Python generator sends one sample per second to the older `/api/telemetry` endpoint. Use <http://localhost:8000/docs> for the API docs and <http://localhost:8000> for the current dashboard.
+The Python generator sends one sample per second to `/api/telemetry`. The frontend reads `/api/dashboard` and saves phase, checklist and link changes through the PUT endpoints. Use <http://localhost:8000/docs> for the API docs and <http://localhost:8000> for the dashboard.
 
 ## API
 
@@ -43,4 +43,4 @@ python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 ```
 
-Tests check the telemetry generators and API payload validation; they do not modify `app.db`. There is one backend, `app.main:app`; `main:app` is a compatibility alias. To use a different SQLite file, set `REMNANT_DB_PATH` before starting the API.
+Tests check packet validation, duplicate handling and compatibility with the mission API; they do not modify `app.db`. There is one backend, `app.main:app`; `main:app` is a compatibility alias. To use a different SQLite file, set `REMNANT_DB_PATH` before starting the API.
