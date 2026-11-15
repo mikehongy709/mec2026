@@ -91,6 +91,7 @@
   </div></div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.5/dist/js/tabler.min.js"></script>
+<script src="./packet-client.js"></script>
 <script>
 const DELAY = 1.3, $ = id => document.getElementById(id);
 const M = [
@@ -109,8 +110,12 @@ const LISTS = {
 };
 const NZ = { alt: .4, vel: .01, g: .05, tmp: 1.5, pwr: .3, prs: 1 };
 const S = { phase: "prelaunch", t0: Date.now(), manual: false, bo: false, link: true, replaying: false,
-            acc: 0, rej: 0, seq: 0, last: Date.now(), cmd: {} };
+            acc: 0, rej: 0, dup: 0, seq: 0, last: 0, cmd: {}, sending: false, apiError: "", retryAt: 0 };
 const buf = [], hist = {}, win = {}, cur = {};
+const packetClient = new PacketClient({
+  apiBase: window.REMNANT_API_BASE ?? (location.protocol === "file:" ? "http://localhost:8000" : ""),
+  streamId: globalThis.crypto?.randomUUID?.() ?? `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+});
 M.forEach(m => { hist[m.k] = Array(40).fill(0); win[m.k] = []; });
 
 // ---- Physics: every value is a function of mission phase and seconds into that phase ----
@@ -136,25 +141,48 @@ const crc = p => Math.round(p.alt * 10 + p.vel * 1000 + p.g * 100 + p.tmp * 10 +
 // ---- Link, buffering, replay ----
 function updateLink() {
   const up = !S.manual && !S.bo;
-  if (up && !S.link && buf.length) startReplay();
+  const wasUp = S.link;
   S.link = up;
-  $("linkDot").className = "status-dot status-dot-animated " + (up ? "bg-success" : "bg-danger");
-  $("linkText").textContent = up ? `Link stable, ${DELAY}s one-way delay` : (S.bo ? "Plasma blackout" : "Link lost");
-  $("dropBtn").textContent = S.manual ? "Restore link" : "Simulate comms dropout";
+  if (up && !wasUp && buf.length) startReplay();
+  else if (up) void flushPackets();
 }
 function startReplay() {
   S.replaying = true;
-  const id = setInterval(() => {
-    for (let i = 0; i < 12 && buf.length; i++) ingest(buf.shift());
-    if (!buf.length) { clearInterval(id); S.replaying = false; }
-  }, 60);
+  void flushPackets();
 }
 function route(pkt) {
-  if (!S.link || S.replaying) { buf.push(pkt); if (buf.length > 300) buf.shift(); } else ingest(pkt);
+  buf.push({ packet: pkt });
+  // Keep the group's 300-packet buffer limit without removing an in-flight job.
+  if (buf.length > 300) buf.splice(S.sending ? 1 : 0, 1);
+  void flushPackets();
+}
+async function flushPackets() {
+  if (S.sending || !S.link || Date.now() < S.retryAt) return;
+  S.sending = true;
+  try {
+    while (S.link && buf.length) {
+      const entry = buf[0];
+      const result = entry.result ?? await packetClient.check(entry.packet);
+      if (result.status === "unavailable") {
+        S.apiError = result.message;
+        S.retryAt = Date.now() + 1000;
+        break;  // Keep the original packet and sequence for retry.
+      }
+      S.apiError = "";
+      entry.result = result;
+      if (!S.link) break;  // Hold a late API response until the simulated link returns.
+      buf.shift();
+      if (result.status === "accepted") ingest(entry.packet);
+      else if (result.status === "duplicate") S.dup++;
+      else S.rej++;
+    }
+  } finally {
+    S.sending = false;
+    if (!buf.length) S.replaying = false;
+  }
 }
 function ingest(p) {
-  const ok = p.crc === crc(p) && M.every(m => Number.isFinite(p[m.k]));
-  if (!ok) { S.rej++; return; }       // corrupted: dropped before it can touch charts or alerts
+  // Only packets accepted by the backend reach smoothing, charts and alerts.
   S.acc++; S.last = Date.now();
   M.forEach(m => {
     const w = win[m.k]; w.push(p[m.k]); if (w.length > 5) w.shift();
@@ -175,7 +203,10 @@ function tick() {
   route(pkt);
 }
 const wsUrl = new URLSearchParams(location.search).get("ws");
-if (wsUrl) { const ws = new WebSocket(wsUrl); ws.onmessage = e => route(JSON.parse(e.data)); }
+if (wsUrl) {
+  const ws = new WebSocket(wsUrl);
+  ws.onmessage = e => { try { route(JSON.parse(e.data)); } catch { S.rej++; } };
+}
 else setInterval(tick, 1000);
 
 // ---- Commands with light-delay round trip ----
@@ -194,7 +225,12 @@ function setPhase(ph) {
 
 // ---- Render ----
 function render() {
-  const now = Date.now(), age = Math.round((now - S.last) / 1000), ph = S.phase;
+  const now = Date.now(), age = S.last ? Math.round((now - S.last) / 1000) : 0, ph = S.phase;
+  const stale = !S.link || Boolean(S.apiError) || !S.acc || now - S.last > 5000;
+  $("linkDot").className = "status-dot status-dot-animated " + (!S.link || S.apiError ? "bg-danger" : stale ? "bg-warning" : "bg-success");
+  $("linkText").textContent = !S.link ? (S.bo ? "Plasma blackout" : "Link lost")
+    : S.apiError || (!S.acc ? "Waiting for validated telemetry" : stale ? "Telemetry delayed" : `Link stable, ${DELAY}s one-way delay`);
+  $("dropBtn").textContent = S.manual ? "Restore link" : "Simulate comms dropout";
   Object.values(S.cmd).forEach(c => { if (c.sentAt === null && S.link) c.sentAt = now; });
   const p = Math.floor((now - S.t0) / 1000), pad = n => String(n).padStart(2, "0");
   $("met").textContent = `T+${pad(Math.floor(p / 60))}:${pad(p % 60)}`;
@@ -203,18 +239,20 @@ function render() {
     const v = cur[m.k] ?? 0, name = m.k === "prs" ? prsName(ph) : m.n, h = hist[m.k];
     const lo = Math.min(...h), rng = (Math.max(...h) - lo) || 1;
     const pts = h.map((y, i) => `${i / 39 * 120},${36 - (y - lo) / rng * 32}`).join(" ");
-    const tag = !S.link ? `<span class="badge bg-warning-lt">STALE, last packet ${age}s ago</span>`
+    const tag = stale ? `<span class="badge bg-warning-lt">${S.acc ? `STALE, last packet ${age}s ago` : "Waiting for telemetry"}</span>`
               : S.replaying ? `<span class="badge bg-info-lt">Replaying</span>` : "";
-    return `<div class="col-sm-6 col-lg-4"><div class="card card-sm ${!S.link ? "stale" : S.replaying ? "replaying" : ""}"><div class="card-body">
+    return `<div class="col-sm-6 col-lg-4"><div class="card card-sm ${stale ? "stale" : S.replaying ? "replaying" : ""}"><div class="card-body">
       <div class="d-flex justify-content-between"><span class="text-secondary">${name}</span>${tag}</div>
       <div class="big">${v.toFixed(m.d)} <span class="fs-4 text-secondary">${m.u}</span></div>
       <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points="${pts}"/></svg></div></div></div>`;
   }).join("");
 
   const b = $("banner");
-  b.classList.toggle("d-none", S.link && !S.replaying);
-  b.className = "alert d-block " + (S.link ? "alert-info" : "alert-warning") + (S.link && !S.replaying ? " d-none" : "");
+  b.className = "alert " + (stale ? "alert-warning" : "alert-info") + (!stale && !S.replaying ? " d-none" : "");
   b.textContent = !S.link ? `${S.bo ? "Plasma blackout" : "Communications lost"}. Showing last known values; ${buf.length} packets buffered on the vehicle.`
+                          : S.apiError ? `${S.apiError}. Start or reconnect the backend; ${buf.length} packets are waiting for validation.`
+                          : !S.acc ? "Waiting for the backend to validate the first telemetry packet."
+                          : stale ? "No recent validated telemetry. Showing last known values."
                           : `Link restored. Replaying ${buf.length} buffered packets onto the charts.`;
 
   const ckHtml = LISTS[ph].map((t, i) => {
@@ -234,6 +272,7 @@ function render() {
   const A = [];
   if (S.bo) A.push(["warning", "Plasma blackout: telemetry interrupted"]);
   else if (!S.link) A.push(["warning", "Comms lost: values are stale"]);
+  else if (stale) A.push(["warning", S.apiError || "Waiting for fresh validated telemetry"]);
   if (ph === "ascent" && cur.g > 3.4) A.push(["info", "Max-Q: peak aerodynamic load"]);
   for (const k in LIM) { const [lo, hi] = LIM[k][ph] || LIM[k].all, v = cur[k];
     if (v < lo || v > hi) A.push(["danger", `${M.find(m => m.k === k).n} ${v.toFixed(1)} outside ${lo} to ${hi}`]); }
@@ -241,9 +280,10 @@ function render() {
     : `<div class="list-group-item text-secondary">No alerts. Values are within limits.</div>`;
 
   $("stats").innerHTML = `<div class="d-flex justify-content-between"><span class="text-secondary">Accepted</span><b>${S.acc}</b></div>
-    <div class="d-flex justify-content-between"><span class="text-secondary">Rejected (checksum)</span><b class="${S.rej ? "text-danger" : ""}">${S.rej}</b></div>
+    <div class="d-flex justify-content-between"><span class="text-secondary">Rejected (validation)</span><b class="${S.rej ? "text-danger" : ""}">${S.rej}</b></div>
+    <div class="d-flex justify-content-between"><span class="text-secondary">Duplicates ignored</span><b>${S.dup}</b></div>
     <div class="d-flex justify-content-between"><span class="text-secondary">Buffered</span><b>${buf.length}</b></div>
-    <div class="text-secondary small mt-3">Bad packets are dropped before smoothing, so injected spikes never trigger alerts.</div>`;
+    <div class="text-secondary small mt-3">Backend checks each packet before smoothing. Invalid and duplicate packets never change charts or alerts.</div>`;
 }
 
 $("phases").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setPhase(b.dataset.p); });
@@ -255,7 +295,7 @@ $("checklist").addEventListener("change", e => {
 $("launch").addEventListener("click", () => setPhase("ascent"));
 $("dropBtn").addEventListener("click", () => { S.manual = !S.manual; updateLink(); });
 
-updateLink(); tick(); setInterval(render, 250);
+updateLink(); tick(); setInterval(render, 250); setInterval(flushPackets, 1000);
 </script>
 </body>
 </html>
