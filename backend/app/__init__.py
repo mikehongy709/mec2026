@@ -1,1 +1,1 @@
-"""Remnant inventory API."""
+"""RemnantMonitor backend application."""
