@@ -1,6 +1,3 @@
-import random
-
-
 METRIC_DEFINITIONS = [
     {"id": "alt", "name": "Altitude", "unit": "km", "value": 408.0, "step": 0.4, "minimum": 395, "maximum": 420},
     {"id": "vel", "name": "Velocity", "unit": "km/s", "value": 7.66, "step": 0.01, "minimum": 7.5, "maximum": 7.8},
@@ -11,16 +8,4 @@ METRIC_DEFINITIONS = [
 ]
 
 METRIC_IDS = frozenset(metric["id"] for metric in METRIC_DEFINITIONS)
-
-
-def initial_readings() -> dict[str, float]:
-    return {metric["id"]: metric["value"] for metric in METRIC_DEFINITIONS}
-
-
-def generate_readings(previous: dict[str, float]) -> dict[str, float]:
-    """Generate one random walk sample from the prior metric values."""
-    return {
-        metric["id"]: previous.get(metric["id"], metric["value"])
-        + random.uniform(-metric["step"], metric["step"])
-        for metric in METRIC_DEFINITIONS
-    }
+PERCENTAGE_METRIC_IDS = frozenset({"pwr", "o2"})

@@ -1,6 +1,6 @@
 # RemnantMonitor
 
-RemnantMonitor is a mission telemetry dashboard. FastAPI serves the frontend and a JSON API; telemetry, mission phase, comms-link state, and checklist completion are stored in SQLite.
+RemnantMonitor is a mission telemetry dashboard. FastAPI serves the frontend and stores telemetry, mission phase, communication state and checklist completion in SQLite. A separate Python generator supplies simulated readings.
 
 ## Run locally
 
@@ -14,7 +14,7 @@ python -m uvicorn app.main:app --reload --port 8000
 
 The backend has one FastAPI app: `app.main:app`. Open <http://localhost:8000>; FastAPI's interactive API page is at <http://localhost:8000/docs>.
 
-In a second terminal, start the simulator:
+Start the telemetry generator in a second terminal so the dashboard receives live readings:
 
 ```sh
 cd backend
@@ -26,7 +26,7 @@ The simulator sends one generated sample per second to FastAPI. It uses only the
 
 ## Dashboard API
 
-All dashboard operations use JSON under `/api`. `GET /api/dashboard` returns the current mission phase and clock, communication state, metric readings and histories, the checklist for the active phase, and saved checklist completion. The frontend polls this endpoint once per second. The same dashboard response is returned after updates so the page can immediately render the persisted state.
+The dashboard polls `GET /api/dashboard` once per second. It returns the saved mission phase and clock, communication state, metric readings and histories, phase checklist and completion. Phase, checklist and link controls use the PUT endpoints below and persist their state in SQLite.
 
 | Method | Endpoint | JSON request body |
 | --- | --- | --- |
@@ -39,12 +39,14 @@ All dashboard operations use JSON under `/api`. `GET /api/dashboard` returns the
 
 The response includes `phase`, `link`, `link_delay_seconds`, `started_at`, `elapsed_seconds`, `metrics`, `checklist_items`, `checks`, and `updated_at`. Each metric has an `id`, display name, unit, current value, alert bounds, simulation step, and 30-value history. Checklist completion is keyed as `<phase>:<item_index>` in `checks`. Unsupported phases, malformed payloads, and checklist indexes outside the selected phase return a validation error.
 
-<<<<<<< HEAD
-The first dashboard request initializes `backend/app.db` with example telemetry. Telemetry values are simulated by the backend and persisted between requests; the simulated comms dropout holds the last values. When serving the frontend from another local development server, it requests `http://localhost:8000` by default. Set `window.REMNANT_API_BASE` before the dashboard script to use another API origin.
+FastAPI creates the tables in `backend/app.db` at startup and logs the exact database path. The separate Python generator POSTs one sample per second to `telemetry_samples`. The dashboard holds the last displayed readings during a simulated link dropout while incoming samples continue to be archived. It uses the API on its own server, including on non-default ports. When using a separate frontend development server, set `window.REMNANT_API_BASE` before the dashboard script or use `?api=http://localhost:8080` to choose the backend origin. Direct-file previews try the local API on port 8000, then port 8080, accepting only a valid dashboard response.
 
-## Inventory API
+The additional [packet-validation API](backend/PACKETS.md) remains available for future integrations. The current group dashboard does not call it or require `/api/config` or a WebSocket server.
+## Data freshness and validation
 
-The repository also contains a standalone inventory API for saved supply quantities, remaining supply days, shortage alerts, and summary counts. See [inventory API setup and examples](backend/README.md).
+If no displayed sample has arrived for more than five seconds, the dashboard marks the readings as stale and keeps the last known values visible. It also marks readings as stale when the simulated link is lost or the API cannot be reached. Before the first sample, it shows a waiting message. Both the backend and Python generator must be running for live readings.
+
+`telemetry_updated_at` is the receive time of the last sample delivered over the link; `telemetry_age_seconds` reports its age, and `telemetry_stale` indicates that it is missing, delayed, or disconnected. `updated_at` remains the time the API response was generated. Samples archived during a simulated dropout do not refresh the displayed readings or receive timestamp.
 
 It runs separately using `app.main:app` on port 8080 with `backend/data/remnant.db`. Its routes are not mounted in the dashboard server described above.
 
@@ -68,7 +70,14 @@ To run all backend checks, including the separate inventory API:
 python -m unittest discover -s tests -v
 ```
 
-No running server or browser is needed. A successful run finishes with `OK`; failures show which behavior broke. The normal dashboard command remains `uvicorn main:app --reload`.
-=======
-FastAPI creates the tables in `backend/app.db` at startup and logs the exact database path. The simulator runs separately and POSTs one sample per second. Each accepted sample is appended to `telemetry_samples`; the table is not truncated. During a simulated comms dropout, samples continue to be stored while the dashboard holds the last values received over the link. When serving the frontend from another local development server, it requests `http://localhost:8000` by default. Set `window.REMNANT_API_BASE` before the dashboard script to use another API origin.
->>>>>>> 66754eedf0583cfd58aeeeb913448903dd2f5db3
+Backend checks exercise packet validation, duplicate protection and compatibility with the mission API using temporary databases. No running server, browser, or shared demo database is required.
+
+With Node installed, the frontend checks include JavaScript syntax validation to catch unresolved merge markers:
+
+```sh
+node --test frontend/tests/*.test.cjs
+```
+
+The legacy `uvicorn main:app` entry point is a compatibility alias for the same `app.main:app` application. The separate inventory prototype has been removed.
+
+The database defaults to `backend/app.db`. Set `REMNANT_DB_PATH` to use another SQLite file, for example an isolated local preview. The application logs the selected path on startup.
