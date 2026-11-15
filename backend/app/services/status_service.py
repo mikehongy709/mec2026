@@ -36,6 +36,7 @@ PHASE_CHECKLISTS: dict[Phase, list[str]] = {
 }
 
 LINK_DELAY_SECONDS = 1.3
+TELEMETRY_STALE_AFTER_SECONDS = 3
 
 class StatusService:
     def __init__(self, repository: MissionStatusRepository):
@@ -44,6 +45,13 @@ class StatusService:
     def get_dashboard(self) -> DashboardResponse:
         mission = self.repository.get_or_create()
         now = datetime.utcnow()
+        latest_sample = self.repository.get_latest_telemetry_sample()
+        telemetry_updated_at = latest_sample.recorded_at if latest_sample else None
+        telemetry_stale = (
+            not mission.link
+            or telemetry_updated_at is None
+            or (now - telemetry_updated_at).total_seconds() > TELEMETRY_STALE_AFTER_SECONDS
+        )
         telemetry = mission.telemetry or {}
         metrics = []
 
@@ -58,6 +66,8 @@ class StatusService:
             phase=mission.phase,
             link=mission.link,
             link_delay_seconds=LINK_DELAY_SECONDS,
+            telemetry_stale=telemetry_stale,
+            telemetry_updated_at=telemetry_updated_at,
             started_at=mission.started_at,
             elapsed_seconds=max(0, int((now - mission.started_at).total_seconds())),
             metrics=metrics,

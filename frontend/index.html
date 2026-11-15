@@ -1,3 +1,251 @@
+<!-- <!doctype html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RemnantMonitor | Mission telemetry</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.5/dist/css/tabler.min.css" />
+  <style>
+    :root {
+      --tblr-primary: #4cc9f0;
+      --tblr-primary-rgb: 76, 201, 240;
+    }
+
+    body {
+      background: #070b1f;
+    }
+
+    .card {
+      background: #0d1433;
+      border-color: #1f2d6b;
+    }
+
+    .navbar {
+      background: #0a1030;
+      border-bottom: 1px solid #1f2d6b;
+    }
+
+    .big {
+      font-size: 2rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stale .big {
+      opacity: .4;
+    }
+
+    .spark {
+      width: 100%;
+      height: 40px;
+    }
+
+    .spark polyline {
+      fill: none;
+      stroke: var(--tblr-primary);
+      stroke-width: 2;
+    }
+
+    .stale .spark polyline {
+      stroke: var(--tblr-warning);
+      stroke-dasharray: 4 3;
+    }
+
+    .replaying .spark polyline {
+      stroke: var(--tblr-info);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header class="navbar navbar-expand-md">
+      <div class="container-xl">
+        <span class="navbar-brand fw-bold">RemnantMonitor</span>
+        <div class="ms-auto d-flex gap-3"><span class="text-secondary">Latest sample</span><span class="fw-bold"
+            id="met">none</span></div>
+      </div>
+    </header>
+
+    <div class="page-wrapper">
+      <div class="container-xl py-4">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3 justify-content-end">
+          <span class="status-dot status-dot-animated" id="linkDot"></span><span id="linkText"></span>
+          <button class="btn btn-outline-warning ms-2" id="dropBtn"></button>
+        </div>
+
+        <div class="alert alert-warning d-none" id="banner"></div>
+        <div class="row row-cards mb-4" id="tiles"></div>
+
+        <div class="row row-cards">
+          <div class="col-lg-6">
+            <div class="card h-100">
+              <div class="card-header">
+                <h3 class="card-title">Checklist</h3>
+              </div>
+              <div class="list-group list-group-flush" id="checklist"></div>
+              <div class="card-footer text-secondary small">Commands take 2.6 s round trip (1.3 s one-way light delay)
+                and queue while the link is down.</div>
+            </div>
+          </div>
+          <div class="col-lg-3">
+            <div class="card h-100">
+              <div class="card-header">
+                <h3 class="card-title">Alerts</h3>
+              </div>
+              <div class="list-group list-group-flush" id="alerts"></div>
+            </div>
+          </div>
+          <div class="col-lg-3">
+            <div class="card h-100">
+              <div class="card-header">
+                <h3 class="card-title">Feed status</h3>
+              </div>
+              <div class="card-body" id="stats"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.5/dist/js/tabler.min.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const API = (new URLSearchParams(location.search).get("api") || "http://127.0.0.1:8000/api").replace(/\/$/, "");
+    const DELAY = 1.3;  // one-way light delay for the command round trip
+    // All telemetry comes from the API.
+    // These are only used if /metrics or /checklist don't exist. (IN CASE FAILURE!!)
+    // Same alert thresholds as the backend definitions.
+    const FALLBACK_METRICS = [
+      { id: "alt", name: "Altitude", unit: "km", step: 0.4, minimum: 396.25, maximum: 418.75 },
+      { id: "vel", name: "Velocity", unit: "km/s", step: 0.01, minimum: 7.515, maximum: 7.785 },
+      { id: "cab", name: "Cabin pressure", unit: "kPa", step: 0.5, minimum: 96.4, maximum: 103.6 },
+      { id: "pwr", name: "Battery charge", unit: "%", step: 1.2, minimum: 28.75, maximum: 96.25 },
+      { id: "tmp", name: "Hull temperature", unit: "Â°C", step: 0.8, minimum: -7.75, maximum: 32.75 },
+      { id: "o2", name: "Oxygen reserve", unit: "%", step: 0.3, minimum: 33.5, maximum: 96.5 }
+    ];
+    const FALLBACK_CHECKS = ["Review telemetry limits", "Confirm comms link", "Run system diagnostics", "Log crew status"];
+    let M = [], CHECKS = FALLBACK_CHECKS;
+    const S = {
+      manual: false, link: true, replaying: false, online: false, got: false, acc: 0, rej: 0,
+      lastId: null, lastNew: Date.now(), rec: null, cmd: {}, ckHtml: ""
+    };
+    const buf = [], hist = {}, cur = {};
+
+    const getJSON = async path => { const r = await fetch(API + path); if (!r.ok) throw r.status; return r.json(); };
+    const norm = d => ({ id: d.id, name: d.name || d.id, unit: d.unit || "", min: d.minimum, max: d.maximum, dec: d.step && d.step < .1 ? 2 : 1 });
+
+    async function init() {
+      try { const d = await getJSON("/metrics"); M = (d.metrics || d).map(norm); } catch { }
+      try { const d = await getJSON("/checklist"); CHECKS = d.items || d; } catch { }
+      poll(); setInterval(poll, 1000);
+    }
+    async function poll() {
+      try {
+        const s = await getJSON("/telemetry/latest");
+        S.online = true; S.got = true;
+        if (!M.length) M = Object.keys(s.readings).map(id => norm(FALLBACK_METRICS.find(d => d.id === id) || { id }));  // no /metrics endpoint
+        if (s.id !== S.lastId) { S.lastId = s.id; S.lastNew = Date.now(); S.rec = s.recorded_at; route(s.readings); }
+      } catch (e) { S.online = e === 404; }   // 404 = API is up but no sample stored yet
+      updateLink();
+    }
+
+    function updateLink() {
+      const up = !S.manual;
+      if (up && !S.link && buf.length) startReplay();
+      S.link = up;
+      $("linkDot").className = "status-dot status-dot-animated " + (!S.online ? "bg-secondary" : up ? "bg-success" : "bg-danger");
+      $("linkText").textContent = !S.online ? "API offline, retrying" : up ? `Link stable, ${DELAY}s one-way delay` : "Link lost";
+      $("dropBtn").textContent = S.manual ? "Restore link" : "Simulate comms dropout";
+    }
+    function startReplay() {
+      S.replaying = true;
+      const id = setInterval(() => {
+        for (let i = 0; i < 12 && buf.length; i++) ingest(buf.shift());
+        if (!buf.length) { clearInterval(id); S.replaying = false; }
+      }, 60);
+    }
+    function route(r) {
+      if (!S.link || S.replaying) { buf.push(r); if (buf.length > 300) buf.shift(); } else ingest(r);
+    }
+    function ingest(r) {
+      if (!M.every(m => Number.isFinite(r[m.id]))) { S.rej++; return; }   // missing or non-numeric reading
+      S.acc++;
+      M.forEach(m => { cur[m.id] = r[m.id]; const h = hist[m.id] ??= []; h.push(r[m.id]); if (h.length > 40) h.shift(); });
+    }
+
+    function cmdStatus(c) {
+      if (c.sentAt === null) return ["Queued, no link", "warning"];
+      const el = (Date.now() - c.sentAt) / 1000;
+      return el < .4 ? ["Sent", "secondary"] : el < DELAY * 2 ? ["In transit", "info"] : ["Confirmed", "success"];
+    }
+
+    function render() {
+      const now = Date.now(), b = $("banner"), age = Math.round((now - S.lastNew) / 1000);
+      const quiet = S.online && S.got && age > 3;      // API reachable but no new sample: generator stopped
+      Object.values(S.cmd).forEach(c => { if (c.sentAt === null && S.link) c.sentAt = now; });
+      $("met").textContent = S.lastId === null ? "none" : `#${S.lastId}${S.rec ? " at " + new Date(S.rec).toLocaleTimeString() : ""}`;
+
+      $("tiles").innerHTML = M.map(m => {
+        const v = cur[m.id] ?? 0, h = hist[m.id] || [];
+        const lo = Math.min(...h), rng = (Math.max(...h) - lo) || 1;
+        const pts = h.length > 1 ? h.map((y, i) => `${i / 39 * 120},${36 - (y - lo) / rng * 32}`).join(" ") : "";
+        const tag = !S.link ? `<span class="badge bg-warning-lt">STALE, last sample ${age}s ago</span>`
+          : S.replaying ? `<span class="badge bg-info-lt">Replaying</span>`
+            : quiet ? `<span class="badge bg-warning-lt">No new samples, ${age}s</span>` : "";
+        return `<div class="col-sm-6 col-lg-4"><div class="card card-sm ${!S.link || quiet ? "stale" : S.replaying ? "replaying" : ""}"><div class="card-body">
+      <div class="d-flex justify-content-between"><span class="text-secondary">${m.name}</span>${tag}</div>
+      <div class="big">${v.toFixed(m.dec)} <span class="fs-4 text-secondary">${m.unit}</span></div>
+      <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points="${pts}"/></svg></div></div></div>`;
+      }).join("");
+
+      const msg = !S.online ? `Cannot reach the API at ${API}. Is FastAPI running?`
+        : !S.got ? "API is up but no telemetry has been stored yet. Start the generator."
+          : !S.link ? `Communications lost. Showing last known values; ${buf.length} samples buffered on the vehicle.`
+            : S.replaying ? `Link restored. Replaying ${buf.length} buffered samples onto the charts.`
+              : quiet ? `No new samples for ${age}s. Is the generator running?` : "";
+      b.className = "alert d-block " + (S.link && S.online ? "alert-info" : "alert-warning") + (msg ? "" : " d-none");
+      b.textContent = msg;
+
+      const ck = CHECKS.map((t, i) => {
+        const c = S.cmd[i], st = !c ? ["Not complete", "secondary"] : !c.v && cmdStatus(c)[0] === "Confirmed" ? ["Not complete", "secondary"] : cmdStatus(c);
+        return `<label class="list-group-item d-flex gap-3 align-items-center">
+      <input type="checkbox" class="form-check-input m-0" data-k="${i}" ${c && c.v ? "checked" : ""}><span class="flex-fill">${t}</span>
+      <span class="badge bg-${st[1]}-lt">${st[0]}</span></label>`;
+      }).join("");
+      if (ck !== S.ckHtml) { S.ckHtml = ck; $("checklist").innerHTML = ck; }
+
+      const A = [];
+      if (!S.link) A.push(["warning", "Comms lost: values are stale"]);
+      M.forEach(m => {
+        const v = cur[m.id];
+        if (S.acc && (v < m.min || v > m.max)) A.push(["danger", `${m.name} ${v.toFixed(m.dec)} outside ${m.min} to ${m.max}`]);
+      });
+      $("alerts").innerHTML = A.length ? A.map(a => `<div class="list-group-item"><span class="badge bg-${a[0]} me-2">${a[0] === "danger" ? "Limit" : "Comms"}</span>${a[1]}</div>`).join("")
+        : `<div class="list-group-item text-secondary">No alerts. Values are within limits.</div>`;
+
+      $("stats").innerHTML = `<div class="d-flex justify-content-between"><span class="text-secondary">Source</span><b>Python generator</b></div>
+    <div class="d-flex justify-content-between"><span class="text-secondary">Samples received</span><b>${S.acc}</b></div>
+    <div class="d-flex justify-content-between"><span class="text-secondary">Invalid samples</span><b class="${S.rej ? "text-danger" : ""}">${S.rej}</b></div>
+    <div class="d-flex justify-content-between"><span class="text-secondary">Buffered</span><b>${buf.length}</b></div>`;
+    }
+
+    $("checklist").addEventListener("change", e => {
+      S.cmd[e.target.dataset.k] = { v: e.target.checked, sentAt: S.link ? Date.now() : null };
+      render();
+    });
+    $("dropBtn").addEventListener("click", () => { S.manual = !S.manual; updateLink(); });
+
+    updateLink(); setInterval(render, 250); init();
+  </script>
+</body>
+
+</html> -->
+
+
+
+
 <!doctype html>
 <html lang="en" data-bs-theme="dark">
 
@@ -36,14 +284,6 @@
       opacity: .45;
     }
 
-    .stale-tag {
-      display: none;
-    }
-
-    .stale .stale-tag {
-      display: inline-block;
-    }
-
     .spark {
       width: 100%;
       height: 40px;
@@ -72,8 +312,6 @@
     <header class="navbar navbar-expand-md">
       <div class="container-xl">
         <span class="navbar-brand fw-bold">RemnantMonitor</span>
-        <div class="ms-auto d-flex align-items-center gap-3"><span class="text-secondary">Mission clock</span><span
-            class="fw-bold" id="met">T+00:00:00</span></div>
       </div>
     </header>
     <div class="page-wrapper">
@@ -88,7 +326,6 @@
           <div class="ms-auto d-flex align-items-center gap-2">
             <span class="status-dot status-dot-animated bg-success" id="linkDot"></span><span
               id="linkText">Connecting</span>
-            <button class="btn btn-outline-warning ms-2" id="dropBtn" disabled>Simulate comms dropout</button>
           </div>
         </div>
         <div class="alert alert-warning d-none" id="staleBanner">Communications lost. Showing last known values; updates
@@ -119,16 +356,26 @@
       </div>
     </div>
   </div>
+  <script src="./api-connection.js"></script>
   <script>
-    const apiBase = window.REMNANT_API_BASE ?? (location.protocol === "file:" ? "http://localhost:8000" : "");
-    const state = { dashboard: null, clockUpdatedAt: Date.now(), clockElapsed: 0, requestPending: false, apiUnavailable: false };
+    const apiCandidates = dashboardApiCandidates(location.protocol,
+      window.REMNANT_API_BASE ?? new URLSearchParams(location.search).get("api"));
+    let apiBase = apiCandidates[0], apiReady = apiCandidates.length === 1, apiConnection;
+    const state = { dashboard: null, requestPending: false, apiUnavailable: false };
     const $ = id => document.getElementById(id);
 
     async function api(path, options = {}) {
+      if (!apiReady) {
+        // Share discovery between polling and any control clicked during startup.
+        apiConnection ??= findDashboardApi(apiCandidates).then(base => {
+          apiBase = base; apiReady = true;
+        }).finally(() => { apiConnection = null; });
+        await apiConnection;
+      }
       const response = await fetch(`${apiBase}/api${path}`, {
         cache: "no-store",
         ...options,
-        headers: { "Content-Type": "application/json", ...options.headers }
+        headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers }
       });
       if (!response.ok) {
         let message = `Request failed (${response.status})`;
@@ -142,7 +389,7 @@
       const metrics = state.dashboard?.metrics || [];
       $("tiles").innerHTML = metrics.map(m => `
         <div class="col-sm-6 col-lg-4"><div class="card card-sm" id="t-${m.id}"><div class="card-body">
-          <div class="d-flex justify-content-between"><span class="text-secondary">${m.name}</span><span class="badge bg-warning-lt stale-tag">Last known</span></div>
+          <div class="d-flex justify-content-between"><span class="text-secondary">${m.name}</span><span class="badge telemetry-status"></span></div>
           <div class="big"><span class="val"></span> <span class="fs-4 text-secondary">${m.unit}</span></div>
           <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points=""></polyline></svg>
         </div></div></div>`).join("");
@@ -151,8 +398,17 @@
     function draw() {
       if (!state.dashboard) return;
       const alerts = [];
+      const hasLiveTelemetry = Boolean(
+        state.dashboard.telemetry_updated_at
+        && !state.dashboard.telemetry_stale
+        && state.dashboard.link
+        && !state.apiUnavailable
+      );
       state.dashboard.metrics.forEach(m => {
         const tile = $("t-" + m.id);
+        const statusBadge = tile.querySelector(".telemetry-status");
+        statusBadge.className = `badge ${hasLiveTelemetry ? "bg-info-lt" : "bg-warning-lt"} telemetry-status`;
+        statusBadge.textContent = hasLiveTelemetry ? "Live" : "Last known";
         tile.querySelector(".val").textContent = m.value.toFixed(m.step < 0.1 ? 2 : 1);
         const h = m.history, lo = Math.min(...h), hi = Math.max(...h) || 1, rng = hi - lo || 1;
         tile.querySelector("polyline").setAttribute("points", h.map((y, i) => `${(i / (h.length - 1)) * 120},${36 - ((y - lo) / rng) * 32}`).join(" "));
@@ -189,8 +445,6 @@
     function renderDashboard(dashboard) {
       state.dashboard = dashboard;
       state.apiUnavailable = false;
-      state.clockElapsed = dashboard.elapsed_seconds;
-      state.clockUpdatedAt = Date.now();
       document.querySelectorAll(".phase-btn").forEach(button => button.classList.toggle("active", button.dataset.p === dashboard.phase));
       const stale = dashboard.telemetry_stale ?? !dashboard.link;
       $("linkDot").className = "status-dot status-dot-animated " + (!dashboard.link ? "bg-danger" : stale ? "bg-warning" : "bg-success");
@@ -201,8 +455,6 @@
           ? "No recent telemetry. Showing last known values; check that the data generator is running."
           : "Waiting for the first telemetry sample. Start the data generator to receive live readings.";
       $("staleBanner").classList.toggle("d-none", !stale);
-      $("dropBtn").textContent = dashboard.link ? "Simulate comms dropout" : "Restore link";
-      $("dropBtn").disabled = false;
       renderTiles(); renderChecklist(); draw();
     }
 
@@ -212,9 +464,8 @@
       $("apiError").classList.remove("d-none");
       $("linkDot").className = "status-dot bg-danger";
       $("linkText").textContent = "Mission API unavailable";
-      $("dropBtn").disabled = true;
       $("staleBanner").textContent = "Mission API unavailable. Displayed readings are last known values.";
-      $("staleBanner").classList.remove("d-none");
+      $("staleBanner").classList.toggle("d-none", !state.dashboard);
       draw();
     }
 
@@ -247,15 +498,6 @@
       if (!event.target.matches("input[type=checkbox]") || !state.dashboard) return;
       update("/checklist", { phase: state.dashboard.phase, item_index: Number(event.target.dataset.index), checked: event.target.checked });
     });
-    $("dropBtn").addEventListener("click", () => {
-      if (state.dashboard) update("/link", { link: !state.dashboard.link });
-    });
-
-    setInterval(() => {
-      const seconds = state.clockElapsed + Math.floor((Date.now() - state.clockUpdatedAt) / 1000);
-      const pad = value => String(value).padStart(2, "0");
-      $("met").textContent = `T+${pad(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
-    }, 1000);
     setInterval(refresh, 1000);
     refresh();
   </script>

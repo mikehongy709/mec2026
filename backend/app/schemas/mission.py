@@ -24,6 +24,8 @@ class DashboardResponse(BaseModel):
     phase: Phase
     link: bool
     link_delay_seconds: float
+    telemetry_stale: bool
+    telemetry_updated_at: datetime | None
     started_at: datetime
     elapsed_seconds: int
     metrics: list[Metric]

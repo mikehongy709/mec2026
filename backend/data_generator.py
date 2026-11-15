@@ -35,11 +35,17 @@ def initial_readings() -> dict[str, float]:
 
 def generate_readings(previous: dict[str, float]) -> dict[str, float]:
     """Generate one random walk sample from the prior metric values."""
-    return {
-        metric["id"]: previous.get(metric["id"], metric["value"])
-        + (random.uniform(-metric["step"], metric["step"]) if MODE == 1 else random.uniform(-5 * metric["step"], 5 * metric["step"]))
-        for metric in METRIC_DEFINITIONS
-    }
+    readings = {}
+    for metric in METRIC_DEFINITIONS:
+        reading = previous.get(metric["id"], metric["value"]) + (
+            random.uniform(-metric["step"], metric["step"])
+            if MODE == 1
+            else random.uniform(-5 * metric["step"], 5 * metric["step"])
+        )
+        readings[metric["id"]] = min(
+            metric["maximum"], max(metric["minimum"], reading)
+        )
+    return readings
 
 
 def request_json(path: str, *, payload: dict | None = None) -> dict:
