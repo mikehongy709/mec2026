@@ -452,8 +452,8 @@
       $("staleBanner").textContent = !dashboard.link
         ? "Communications lost. Showing last known values; updates resume when the link returns."
         : dashboard.telemetry_updated_at
-          ? "No recent telemetry. Showing last known values; check that the data generator is running."
-          : "Waiting for the first telemetry sample. Start the data generator to receive live readings.";
+          ? "No recent telemetry. Showing last known values."
+          : "Waiting for the first telemetry sample.";
       $("staleBanner").classList.toggle("d-none", !stale);
       renderTiles(); renderChecklist(); draw();
     }
