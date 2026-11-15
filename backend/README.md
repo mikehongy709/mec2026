@@ -1,6 +1,6 @@
 # Remnant inventory backend
 
-The first backend feature sets a supply's onboard quantity, saves it in SQLite, and returns its remaining supply days and shortage status. It uses the existing FastAPI, SQLAlchemy, and Pydantic dependencies.
+The backend lists inventory, reports shortage alerts and summary counts, and saves quantity updates in SQLite. Every response uses the same remaining-day and status calculations. It uses the existing FastAPI, SQLAlchemy, and Pydantic dependencies.
 
 ## Run locally
 
@@ -25,6 +25,45 @@ backend/.venv-local/bin/python -m uvicorn app.main:app --app-dir backend --host 
 Open **http://127.0.0.1:8080/docs** to try the API, or use the requests below. The server creates `backend/data/remnant.db` on first startup and seeds the eight supplies from the frontend sample mission. Subsequent startups preserve saved quantities. An optional `REMNANT_DB_PATH` environment variable selects another SQLite file.
 
 The Tabler frontend still runs its own sample data. This backend feature can be exercised independently before frontend integration.
+
+## List inventory
+
+`GET /api/inventory`
+
+Returns a JSON array containing all supplies in ascending ID order. Each entry has the same fields as the single-supply response below: `id`, `name`, `unit`, `quantity`, `daily_consumption`, `days_remaining`, and `status`.
+
+## List shortage alerts
+
+`GET /api/alerts`
+
+Returns a JSON array of supplies marked `critical` or `watch`, ordered by their unrounded `days_remaining` (lowest first), with ID as a tie-breaker. Alerts are calculated from current saved quantities on every request. Replenishing a supply removes it from this list once it becomes healthy.
+
+The initial sample mission returns battery packs (3 days, critical), followed by oxygen (6 days, watch). An empty alert list is `[]`.
+
+## Inventory summary
+
+`GET /api/inventory/summary`
+
+Returns counts of supply records, not combined quantities across different units. With the initial sample data:
+
+```json
+{
+  "total_supplies": 8,
+  "healthy": 6,
+  "watch": 1,
+  "critical": 1
+}
+```
+
+An empty inventory returns zero for every count; inventory listing returns `[]`.
+
+To try the new reads from PowerShell while the server is running:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8080/api/inventory
+Invoke-RestMethod http://127.0.0.1:8080/api/alerts
+Invoke-RestMethod http://127.0.0.1:8080/api/inventory/summary
+```
 
 ## Read a supply
 
@@ -93,4 +132,4 @@ backend/.venv-local/bin/python -m pip install -r backend/requirements-dev.txt
 PYTHONPATH=backend backend/.venv-local/bin/python -m unittest discover -s backend/tests -v
 ```
 
-Tests use temporary SQLite databases, covering the shortage workflow, boundary values, input validation, missing supplies, zero consumption, and persistence across application restarts.
+Tests use temporary SQLite databases, covering the shortage workflow, boundary values, input validation, missing supplies, zero consumption, and persistence across application restarts. They also check listing and alert ordering, summary counts, empty inventory, and all three views updating after quantity changes.

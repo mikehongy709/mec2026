@@ -1,4 +1,4 @@
-"""Validated request and response formats for inventory updates."""
+"""Validated inventory request and response formats."""
 
 from typing import Annotated, Literal
 
@@ -27,3 +27,10 @@ class SupplyResponse(BaseModel):
     daily_consumption: float
     days_remaining: float | None
     status: Literal["healthy", "watch", "critical"]
+
+
+class InventorySummary(BaseModel):
+    total_supplies: int = Field(ge=0)
+    healthy: int = Field(ge=0)
+    watch: int = Field(ge=0)
+    critical: int = Field(ge=0)

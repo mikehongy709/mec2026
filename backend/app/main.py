@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .database import build_engine, initialize_inventory
+from .routes.alerts import router as alerts_router
 from .routes.inventory import router as inventory_router
 
 
@@ -36,7 +37,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     application = FastAPI(
         title="Remnant Inventory API",
         version="0.1.0",
-        description="Update onboard quantities and calculate remaining supply days.",
+        description="Read inventory, review shortages, and update onboard quantities.",
         lifespan=lifespan,
     )
     application.state.engine = engine
@@ -52,6 +53,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         return JSONResponse(status_code=422, content={"detail": details})
 
     application.include_router(inventory_router)
+    application.include_router(alerts_router)
     return application
 
 
