@@ -34,3 +34,23 @@ The first dashboard request initializes `backend/app.db` with example telemetry.
 The repository also contains a standalone inventory API for saved supply quantities, remaining supply days, shortage alerts, and summary counts. See [inventory API setup and examples](backend/README.md).
 
 It runs separately using `app.main:app` on port 8080 with `backend/data/remnant.db`. Its routes are not mounted in the dashboard server described above.
+
+## Automated checks
+
+The mission dashboard checks cover telemetry responses, saved phases and checklist completion, communications dropout and recovery, invalid input, the mission clock, and persistence after restarting the application. They use temporary SQLite databases and block connections to the shared demo database.
+
+From the repository root, using your backend Python environment:
+
+```sh
+cd backend
+python -m pip install -r requirements-dev.txt
+python -m unittest discover -s tests -p "test_mission_dashboard.py" -v
+```
+
+To run all backend checks, including the separate inventory API:
+
+```sh
+python -m unittest discover -s tests -v
+```
+
+No running server or browser is needed. A successful run finishes with `OK`; failures show which behavior broke. The normal dashboard command remains `uvicorn main:app --reload`.

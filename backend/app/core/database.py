@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from fastapi import Request
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -18,9 +19,9 @@ SessionLocal = sessionmaker(
     bind=engine,
 )
 
-def get_db():
+def get_db(request: Request):
 
-    db = SessionLocal()
+    db = SessionLocal(bind=request.app.state.database_engine)
 
     try:
         yield db
