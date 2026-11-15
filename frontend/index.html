@@ -72,8 +72,6 @@
     <header class="navbar navbar-expand-md">
       <div class="container-xl">
         <span class="navbar-brand fw-bold">RemnantMonitor</span>
-        <div class="ms-auto d-flex align-items-center gap-3"><span class="text-secondary">Mission clock</span><span
-            class="fw-bold" id="met">T+00:00:00</span></div>
       </div>
     </header>
     <div class="page-wrapper">
@@ -123,7 +121,7 @@
     const apiCandidates = dashboardApiCandidates(location.protocol,
       window.REMNANT_API_BASE ?? new URLSearchParams(location.search).get("api"));
     let apiBase = apiCandidates[0], apiReady = apiCandidates.length === 1, apiConnection;
-    const state = { dashboard: null, clockUpdatedAt: Date.now(), clockElapsed: 0, requestPending: false, apiUnavailable: false };
+    const state = { dashboard: null, requestPending: false, apiUnavailable: false };
     const $ = id => document.getElementById(id);
 
     async function api(path, options = {}) {
@@ -198,8 +196,6 @@
     function renderDashboard(dashboard) {
       state.dashboard = dashboard;
       state.apiUnavailable = false;
-      state.clockElapsed = dashboard.elapsed_seconds;
-      state.clockUpdatedAt = Date.now();
       document.querySelectorAll(".phase-btn").forEach(button => button.classList.toggle("active", button.dataset.p === dashboard.phase));
       const stale = dashboard.telemetry_stale ?? !dashboard.link;
       $("linkDot").className = "status-dot status-dot-animated " + (!dashboard.link ? "bg-danger" : stale ? "bg-warning" : "bg-success");
@@ -253,11 +249,6 @@
       if (!event.target.matches("input[type=checkbox]") || !state.dashboard) return;
       update("/checklist", { phase: state.dashboard.phase, item_index: Number(event.target.dataset.index), checked: event.target.checked });
     });
-    setInterval(() => {
-      const seconds = state.clockElapsed + Math.floor((Date.now() - state.clockUpdatedAt) / 1000);
-      const pad = value => String(value).padStart(2, "0");
-      $("met").textContent = `T+${pad(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
-    }, 1000);
     setInterval(refresh, 1000);
     refresh();
   </script>
