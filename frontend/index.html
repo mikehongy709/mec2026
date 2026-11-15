@@ -72,6 +72,8 @@
     <header class="navbar navbar-expand-md">
       <div class="container-xl">
         <span class="navbar-brand fw-bold">RemnantMonitor</span>
+        <div class="ms-auto d-flex align-items-center gap-3"><span class="text-secondary">Mission clock</span><span
+            class="fw-bold" id="met">T+00:00:00</span></div>
       </div>
     </header>
     <div class="page-wrapper">
@@ -86,6 +88,7 @@
           <div class="ms-auto d-flex align-items-center gap-2">
             <span class="status-dot status-dot-animated bg-success" id="linkDot"></span><span
               id="linkText">Connecting</span>
+            <button class="btn btn-outline-warning ms-2" id="dropBtn" disabled>Simulate comms dropout</button>
           </div>
         </div>
         <div class="alert alert-warning d-none" id="staleBanner">Communications lost. Showing last known values; updates
@@ -116,26 +119,16 @@
       </div>
     </div>
   </div>
-  <script src="./api-connection.js"></script>
   <script>
-    const apiCandidates = dashboardApiCandidates(location.protocol,
-      window.REMNANT_API_BASE ?? new URLSearchParams(location.search).get("api"));
-    let apiBase = apiCandidates[0], apiReady = apiCandidates.length === 1, apiConnection;
-    const state = { dashboard: null, requestPending: false, apiUnavailable: false };
+    const apiBase = window.REMNANT_API_BASE ?? (location.protocol === "file:" ? "http://localhost:8000" : "");
+    const state = { dashboard: null, clockUpdatedAt: Date.now(), clockElapsed: 0, requestPending: false, apiUnavailable: false };
     const $ = id => document.getElementById(id);
 
     async function api(path, options = {}) {
-      if (!apiReady) {
-        // Share discovery between polling and any control clicked during startup.
-        apiConnection ??= findDashboardApi(apiCandidates).then(base => {
-          apiBase = base; apiReady = true;
-        }).finally(() => { apiConnection = null; });
-        await apiConnection;
-      }
       const response = await fetch(`${apiBase}/api${path}`, {
         cache: "no-store",
         ...options,
-        headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers }
+        headers: { "Content-Type": "application/json", ...options.headers }
       });
       if (!response.ok) {
         let message = `Request failed (${response.status})`;
@@ -196,6 +189,8 @@
     function renderDashboard(dashboard) {
       state.dashboard = dashboard;
       state.apiUnavailable = false;
+      state.clockElapsed = dashboard.elapsed_seconds;
+      state.clockUpdatedAt = Date.now();
       document.querySelectorAll(".phase-btn").forEach(button => button.classList.toggle("active", button.dataset.p === dashboard.phase));
       const stale = dashboard.telemetry_stale ?? !dashboard.link;
       $("linkDot").className = "status-dot status-dot-animated " + (!dashboard.link ? "bg-danger" : stale ? "bg-warning" : "bg-success");
@@ -206,6 +201,8 @@
           ? "No recent telemetry. Showing last known values; check that the data generator is running."
           : "Waiting for the first telemetry sample. Start the data generator to receive live readings.";
       $("staleBanner").classList.toggle("d-none", !stale);
+      $("dropBtn").textContent = dashboard.link ? "Simulate comms dropout" : "Restore link";
+      $("dropBtn").disabled = false;
       renderTiles(); renderChecklist(); draw();
     }
 
@@ -215,8 +212,9 @@
       $("apiError").classList.remove("d-none");
       $("linkDot").className = "status-dot bg-danger";
       $("linkText").textContent = "Mission API unavailable";
+      $("dropBtn").disabled = true;
       $("staleBanner").textContent = "Mission API unavailable. Displayed readings are last known values.";
-      $("staleBanner").classList.toggle("d-none", !state.dashboard);
+      $("staleBanner").classList.remove("d-none");
       draw();
     }
 
@@ -249,6 +247,15 @@
       if (!event.target.matches("input[type=checkbox]") || !state.dashboard) return;
       update("/checklist", { phase: state.dashboard.phase, item_index: Number(event.target.dataset.index), checked: event.target.checked });
     });
+    $("dropBtn").addEventListener("click", () => {
+      if (state.dashboard) update("/link", { link: !state.dashboard.link });
+    });
+
+    setInterval(() => {
+      const seconds = state.clockElapsed + Math.floor((Date.now() - state.clockUpdatedAt) / 1000);
+      const pad = value => String(value).padStart(2, "0");
+      $("met").textContent = `T+${pad(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
+    }, 1000);
     setInterval(refresh, 1000);
     refresh();
   </script>
