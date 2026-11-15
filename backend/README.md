@@ -1,5 +1,7 @@
 # RemnantMonitor backend
 
+For the optional simulator packet checks and duplicate protection, see [PACKETS.md](PACKETS.md).
+
 The backend is one FastAPI application. It stores mission state and incoming telemetry in SQLite at `backend/app.db`.
 
 ## Run

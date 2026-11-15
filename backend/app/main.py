@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
+from app.api.v1.packets import router as packet_router
 from app.api.v1.status import router as status_router
 from app.database import Base, DATABASE_PATH, engine
 from app.models.mission import MissionState, TelemetrySample  # Register tables.
@@ -78,4 +79,5 @@ app.add_middleware(
 )
 
 app.include_router(status_router, prefix="/api")
+app.include_router(packet_router, prefix="/api")
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
