@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.telemetry import METRIC_IDS, PERCENTAGE_METRIC_IDS
+from app.telemetry import METRIC_IDS
 
 
 Phase = Literal["prelaunch", "ascent", "orbit", "reentry"]
@@ -30,9 +30,6 @@ class DashboardResponse(BaseModel):
     checklist_items: list[str]
     checks: dict[str, bool]
     updated_at: datetime
-    telemetry_updated_at: datetime | None = None
-    telemetry_age_seconds: float | None = None
-    telemetry_stale: bool = True
 
 
 class PhaseUpdate(BaseModel):
@@ -59,9 +56,6 @@ class TelemetryIngest(BaseModel):
     def validate_reading_ids(cls, readings: dict[str, float]) -> dict[str, float]:
         if set(readings) != METRIC_IDS:
             raise ValueError("Readings must include exactly the supported metric IDs")
-        for metric_id in PERCENTAGE_METRIC_IDS:
-            if not 0 <= readings[metric_id] <= 100:
-                raise ValueError(f"{metric_id} must be between 0 and 100 percent")
         return readings
 
 

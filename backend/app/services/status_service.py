@@ -36,7 +36,6 @@ PHASE_CHECKLISTS: dict[Phase, list[str]] = {
 }
 
 LINK_DELAY_SECONDS = 1.3
-TELEMETRY_TIMEOUT_SECONDS = 5
 
 class StatusService:
     def __init__(self, repository: MissionStatusRepository):
@@ -46,9 +45,6 @@ class StatusService:
         mission = self.repository.get_or_create()
         now = datetime.utcnow()
         telemetry = mission.telemetry or {}
-        displayed_sample = self.repository.get_latest_linked_sample() if telemetry else None
-        received_at = displayed_sample.recorded_at if displayed_sample else None
-        age = max(0.0, (now - received_at).total_seconds()) if received_at else None
         metrics = []
 
         for definition in METRIC_DEFINITIONS:
@@ -68,9 +64,6 @@ class StatusService:
             checklist_items=PHASE_CHECKLISTS[mission.phase],
             checks=mission.checks or {},
             updated_at=now,
-            telemetry_updated_at=received_at,
-            telemetry_age_seconds=age,
-            telemetry_stale=not mission.link or age is None or age > TELEMETRY_TIMEOUT_SECONDS,
         )
 
     def ingest_telemetry(self, readings: dict[str, float]) -> TelemetrySample:

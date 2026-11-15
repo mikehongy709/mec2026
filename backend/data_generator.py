@@ -9,10 +9,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import random
 
-from app.telemetry import PERCENTAGE_METRIC_IDS
+from app.telemetry import generate_readings, initial_readings
 
 
-MODE = sys.argv[1] if len(sys.argv) > 1 else "0"
+MODE = sys.argv[1] if len(sys.argv) > 1 else 0
 API_BASE = os.environ.get("REMNANT_API_URL", "http://127.0.0.1:8000/api").rstrip("/")
 REQUEST_TIMEOUT_SECONDS = 5
 
@@ -36,14 +36,11 @@ def initial_readings() -> dict[str, float]:
 
 def generate_readings(previous: dict[str, float]) -> dict[str, float]:
     """Generate one random walk sample from the prior metric values."""
-    readings = {
+    return {
         metric["id"]: previous.get(metric["id"], metric["value"])
-        + (random.uniform(-metric["step"], metric["step"]) if MODE == "1" else random.uniform(-5 * metric["step"], 5 * metric["step"]))
+        + (random.uniform(-metric["step"], metric["step"]) if MODE == 1 else random.uniform(-5 * metric["step"], 5 * metric["step"]))
         for metric in METRIC_DEFINITIONS
     }
-    for metric_id in PERCENTAGE_METRIC_IDS:
-        readings[metric_id] = max(0.0, min(100.0, readings[metric_id]))
-    return readings
 
 
 def request_json(path: str, *, payload: dict | None = None) -> dict:
