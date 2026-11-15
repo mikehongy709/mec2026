@@ -12,7 +12,17 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Open <http://localhost:8000>. FastAPI's interactive API page is at <http://localhost:8000/docs>.
+Run `main:app` from the `backend` directory for the mission dashboard. `app.main:app` starts a separate inventory prototype and uses a different database. Open <http://localhost:8000>; FastAPI's interactive API page is at <http://localhost:8000/docs>.
+
+In a second terminal, start the simulator:
+
+```sh
+cd backend
+source .venv/bin/activate
+python data_generator.py
+```
+
+The simulator sends one generated sample per second to FastAPI. It uses only the Python standard library. Set `REMNANT_API_URL` if the API is running at a different base URL; the default is `http://127.0.0.1:8000/api`.
 
 ## Dashboard API
 
@@ -21,6 +31,8 @@ All dashboard operations use JSON under `/api`. `GET /api/dashboard` returns the
 | Method | Endpoint | JSON request body |
 | --- | --- | --- |
 | `GET` | `/api/dashboard` | — |
+| `POST` | `/api/telemetry` | `{"readings":{"alt":408.1,"vel":7.66,"cab":101,"pwr":82,"tmp":21,"o2":94}}` |
+| `GET` | `/api/telemetry/latest` | — |
 | `PUT` | `/api/phase` | `{"phase":"orbit"}` |
 | `PUT` | `/api/checklist` | `{"phase":"orbit","item_index":0,"checked":true}` |
 | `PUT` | `/api/link` | `{"link":false}` |
@@ -38,6 +50,8 @@ It runs separately using `app.main:app` on port 8080 with `backend/data/remnant.
 ## Automated checks
 
 The mission dashboard checks cover telemetry responses, saved phases and checklist completion, communications dropout and recovery, invalid input, the mission clock, and persistence after restarting the application. They use temporary SQLite databases and block connections to the shared demo database.
+
+The checks send samples through the new telemetry API directly, so the data generator does not need to be running. They also verify that reading the dashboard does not generate samples, incoming data is archived during a dropout, and older telemetry archives upgrade without losing readings.
 
 From the repository root, using your backend Python environment:
 

@@ -8,6 +8,8 @@ from app.schemas.mission import (
     DashboardResponse,
     LinkUpdate,
     PhaseUpdate,
+    TelemetryIngest,
+    TelemetrySampleResponse,
 )
 from app.services.status_service import StatusService
 
@@ -27,6 +29,28 @@ def get_status_service(db: Session = Depends(get_db)) -> StatusService:
 def get_dashboard(service: StatusService = Depends(get_status_service)):
     """Return telemetry, mission clock, phase checklist, and communication state."""
     return service.get_dashboard()
+
+
+@router.post(
+    "/telemetry",
+    response_model=TelemetrySampleResponse,
+    status_code=201,
+    summary="Store one telemetry sample from the data generator",
+)
+def ingest_telemetry(
+    data: TelemetryIngest,
+    service: StatusService = Depends(get_status_service),
+):
+    return service.ingest_telemetry(data.readings)
+
+
+@router.get(
+    "/telemetry/latest",
+    response_model=TelemetrySampleResponse,
+    summary="Read the latest stored telemetry sample",
+)
+def get_latest_telemetry(service: StatusService = Depends(get_status_service)):
+    return service.get_latest_telemetry()
 
 
 @router.put(

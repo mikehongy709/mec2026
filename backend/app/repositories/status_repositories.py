@@ -1,6 +1,8 @@
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
-from app.models.mission import MissionState
+from app.models.mission import MissionState, TelemetrySample
 
 
 class MissionStatusRepository:
@@ -22,3 +24,30 @@ class MissionStatusRepository:
             self.db.add(mission)
             self.db.flush()
         return mission
+
+    def add_telemetry_sample(
+        self,
+        *,
+        phase: str,
+        link: bool,
+        checks: dict[str, bool],
+        readings: dict[str, float],
+        recorded_at: datetime,
+    ) -> TelemetrySample:
+        sample = TelemetrySample(
+            phase=phase,
+            link=link,
+            checks=checks,
+            readings=readings,
+            recorded_at=recorded_at,
+        )
+        self.db.add(sample)
+        self.db.flush()
+        return sample
+
+    def get_latest_telemetry_sample(self) -> TelemetrySample | None:
+        return (
+            self.db.query(TelemetrySample)
+            .order_by(TelemetrySample.id.desc())
+            .first()
+        )
