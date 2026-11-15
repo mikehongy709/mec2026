@@ -6,173 +6,256 @@
   <title>RemnantMonitor | Mission telemetry</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.5/dist/css/tabler.min.css" />
   <style>
-    :root { --tblr-primary: #4cc9f0; --tblr-primary-rgb: 76, 201, 240; }
-    body { background: #070b1f; }
-    .card { background: #0d1433; border-color: #1f2d6b; }
-    .navbar { background: #0a1030; border-bottom: 1px solid #1f2d6b; }
-    .big { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .stale .big { opacity: .45; }
-    .stale-tag { display: none; }
-    .stale .stale-tag { display: inline-block; }
-    .spark { width: 100%; height: 40px; }
-    .spark polyline { fill: none; stroke: var(--tblr-primary); stroke-width: 2; }
-    .stale .spark polyline { stroke: var(--tblr-warning); stroke-dasharray: 4 3; }
-    .phase-btn.active { background: var(--tblr-primary); color: #041022; }
+    :root { --tblr-primary: #4cc9f0; 
+      --tblr-primary-rgb: 76, 201, 240; 
+    }
+    body { 
+      background: #070b1f; 
+    }
+    .card { 
+      background: #0d1433; 
+      border-color: #1f2d6b; 
+    }
+    .navbar { 
+      background: #0a1030; 
+      border-bottom: 1px solid #1f2d6b; 
+    }
+    .big { 
+      font-size: 2rem; 
+      font-weight: 700; 
+      font-variant-numeric: tabular-nums; 
+    }
+    .stale .big { opacity: .4; 
+    }
+    .spark { width: 100%; 
+      height: 40px; 
+    }
+    .spark polyline { 
+      fill: none; 
+      stroke: var(--tblr-primary); stroke-width: 2; 
+    }
+    .stale .spark polyline { 
+      stroke: var(--tblr-warning); 
+      stroke-dasharray: 4 3; 
+    }
+    .replaying .spark polyline { 
+      stroke: var(--tblr-info); 
+    }
+    .phase-btn.active { 
+      background: var(--tblr-primary); 
+      color: #041022; 
+    }
   </style>
 </head>
 <body>
-  <div class="page">
-    <header class="navbar navbar-expand-md">
-      <div class="container-xl">
-        <span class="navbar-brand fw-bold">RemnantMonitor</span>
-        <div class="ms-auto d-flex align-items-center gap-3">
-          <span class="text-secondary">Mission clock</span>
-          <span class="fw-bold" id="met">T+00:00:00</span>
-        </div>
+<div class="page">
+  <header class="navbar navbar-expand-md"><div class="container-xl">
+    <span class="navbar-brand fw-bold">RemnantMonitor</span>
+    <div class="ms-auto d-flex gap-3"><span class="text-secondary">Phase clock</span><span class="fw-bold" id="met"></span></div>
+  </div></header>
+
+  <div class="page-wrapper"><div class="container-xl py-4">
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+      <div class="btn-group" id="phases">
+        <button class="btn phase-btn active" data-p="prelaunch">Pre-launch</button>
+        <button class="btn phase-btn" data-p="ascent">Ascent</button>
+        <button class="btn phase-btn" data-p="orbit">Orbit</button>
+        <button class="btn phase-btn" data-p="reentry">Re-entry</button>
       </div>
-    </header>
-
-    <div class="page-wrapper"><div class="container-xl py-4">
-
-      <div class="d-flex flex-wrap align-items-center gap-3 mb-4">
-        <div class="btn-group" id="phases">
-          <button class="btn phase-btn" data-p="prelaunch">Pre-launch</button>
-          <button class="btn phase-btn" data-p="ascent">Ascent</button>
-          <button class="btn phase-btn active" data-p="orbit">Orbit</button>
-          <button class="btn phase-btn" data-p="reentry">Re-entry</button>
-        </div>
-        <div class="ms-auto d-flex align-items-center gap-2">
-          <span class="status-dot status-dot-animated bg-success" id="linkDot"></span>
-          <span id="linkText">Link stable</span>
-          <button class="btn btn-outline-warning ms-2" id="dropBtn">Simulate comms dropout</button>
-        </div>
+      <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+        <span class="status-dot status-dot-animated" id="linkDot"></span><span id="linkText"></span>
+        <label class="form-check form-switch m-0 ms-2"><input class="form-check-input" type="checkbox" id="corrupt"><span class="form-check-label">Inject corrupt packets</span></label>
+        <button class="btn btn-outline-warning" id="dropBtn"></button>
       </div>
+    </div>
 
-      <div class="alert alert-warning d-none" id="staleBanner">
-        Communications lost. Showing last known values; updates resume when the link returns.
-      </div>
+    <div class="alert alert-warning d-none" id="banner"></div>
+    <div class="row row-cards mb-4" id="tiles"></div>
 
-      <div class="row row-cards mb-4" id="tiles"></div>
+    <div class="row row-cards">
+      <div class="col-lg-6"><div class="card h-100">
+        <div class="card-header"><h3 class="card-title">Checklist</h3>
+          <div class="card-actions"><button class="btn btn-primary btn-sm d-none" id="launch">Authorize launch</button></div></div>
+        <div class="list-group list-group-flush" id="checklist"></div>
+        <div class="card-footer text-secondary small">Commands take 2.6 s round trip (1.3 s one-way light delay) and queue while the link is down.</div>
+      </div></div>
+      <div class="col-lg-3"><div class="card h-100">
+        <div class="card-header"><h3 class="card-title">Alerts</h3></div>
+        <div class="list-group list-group-flush" id="alerts"></div>
+      </div></div>
+      <div class="col-lg-3"><div class="card h-100">
+        <div class="card-header"><h3 class="card-title">Packet integrity</h3></div>
+        <div class="card-body" id="stats"></div>
+      </div></div>
+    </div>
+  </div></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.5/dist/js/tabler.min.js"></script>
+<script>
+const DELAY = 1.3, $ = id => document.getElementById(id);
+const M = [
+  { k: "alt", n: "Altitude", u: "km", d: 1 }, { k: "vel", n: "Velocity", u: "km/s", d: 2 },
+  { k: "g", n: "G-load", u: "g", d: 1 }, { k: "tmp", n: "Hull temperature", u: "°C", d: 0 },
+  { k: "pwr", n: "Battery", u: "%", d: 0 }, { k: "prs", n: "", u: "kPa", d: 0 }
+];
+const prsName = p => (p === "prelaunch" || p === "ascent") ? "Propellant pressure" : "Cabin pressure";
+const LIM = { tmp: { prelaunch: [0, 40], ascent: [0, 400], orbit: [-60, 100], reentry: [0, 1600] },
+              g: { prelaunch: [.9, 1.1], ascent: [0, 4.2], orbit: [-.1, .1], reentry: [0, 5] }, pwr: { all: [20, 100] } };
+const LISTS = {
+  prelaunch: ["Propellant tanks pressurized", "Range safety cleared", "Crew suit checks complete", "Launch window confirmed"],
+  ascent: ["Max-Q passed", "Stage separation confirmed", "Fairing jettison", "Orbital insertion burn"],
+  orbit: ["Solar arrays deployed", "Antenna pointing verified", "Daily system diagnostics", "Crew exercise logged"],
+  reentry: ["Deorbit burn planned", "Heat shield inspected", "Landing zone weather checked", "Recovery team on station"]
+};
+const NZ = { alt: .4, vel: .01, g: .05, tmp: 1.5, pwr: .3, prs: 1 };
+const S = { phase: "prelaunch", t0: Date.now(), manual: false, bo: false, link: true, replaying: false,
+            acc: 0, rej: 0, seq: 0, last: Date.now(), cmd: {} };
+const buf = [], hist = {}, win = {}, cur = {};
+M.forEach(m => { hist[m.k] = Array(40).fill(0); win[m.k] = []; });
 
-      <div class="row row-cards">
-        <div class="col-lg-7">
-          <div class="card h-100">
-            <div class="card-header">
-              <h3 class="card-title">Checklist</h3>
-              <div class="card-actions"><span class="badge bg-primary-lt" id="checkCount"></span></div>
-            </div>
-            <div class="list-group list-group-flush" id="checklist"></div>
-          </div>
-        </div>
-        <div class="col-lg-5">
-          <div class="card h-100">
-            <div class="card-header"><h3 class="card-title">Alerts</h3></div>
-            <div class="list-group list-group-flush" id="alerts">
-              <div class="list-group-item text-secondary">No alerts. Values are within limits.</div>
-            </div>
-          </div>
-        </div>
-      </div>
+// ---- Physics: every value is a function of mission phase and seconds into that phase ----
+const sm = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+function phys(ph, p) {
+  let r;
+  if (ph === "prelaunch") r = { alt: 0, vel: 0, g: 1, tmp: 24, pwr: 98, prs: 310 };
+  else if (ph === "ascent") { const x = p / 90;
+    r = { alt: 408 * sm(x), vel: 7.66 * sm(x), g: x >= 1 ? 0 : 1 + 3 * Math.pow(Math.sin(Math.PI * x), .7),
+          tmp: 24 + 100 * sm(x), pwr: 97, prs: 310 - 270 * sm(x) }; }
+  else if (ph === "orbit") { const w = 2 * Math.PI * p / 90;  // 90 s demo orbit: sunlit then eclipse
+    r = { alt: 408 + 6 * Math.sin(p / 60), vel: 7.66 + .01 * Math.sin(p / 60 + 1), g: 0,
+          tmp: 10 + 70 * Math.sin(w), pwr: 80 + 12 * Math.sin(w), prs: 101.3 }; }
+  else { const x = p / 90, e = c => Math.exp(-Math.pow((x - c) / .18, 2));
+    r = { alt: 120 * (1 - sm(x)), vel: .25 + 7.41 * (1 - sm(x)), g: 4.5 * Math.exp(-Math.pow((x - .55) / .15, 2)),
+          tmp: 24 + 1430 * e(.4), pwr: 70, prs: 101 }; }
+  for (const k in r) { r[k] += (Math.random() - .5) * NZ[k]; if (k === "alt" || k === "vel") r[k] = Math.abs(r[k]); r[k] = Math.round(r[k] * 100) / 100; }
+  return r;
+}
+// Same checksum must be implemented by any server: values rounded to 2 dp.
+const crc = p => Math.round(p.alt * 10 + p.vel * 1000 + p.g * 100 + p.tmp * 10 + p.pwr * 10 + p.prs * 10 + p.seq) % 65521;
 
-    </div></div>
-  </div>
+// ---- Link, buffering, replay ----
+function updateLink() {
+  const up = !S.manual && !S.bo;
+  if (up && !S.link && buf.length) startReplay();
+  S.link = up;
+  $("linkDot").className = "status-dot status-dot-animated " + (up ? "bg-success" : "bg-danger");
+  $("linkText").textContent = up ? `Link stable, ${DELAY}s one-way delay` : (S.bo ? "Plasma blackout" : "Link lost");
+  $("dropBtn").textContent = S.manual ? "Restore link" : "Simulate comms dropout";
+}
+function startReplay() {
+  S.replaying = true;
+  const id = setInterval(() => {
+    for (let i = 0; i < 12 && buf.length; i++) ingest(buf.shift());
+    if (!buf.length) { clearInterval(id); S.replaying = false; }
+  }, 60);
+}
+function route(pkt) {
+  if (!S.link || S.replaying) { buf.push(pkt); if (buf.length > 300) buf.shift(); } else ingest(pkt);
+}
+function ingest(p) {
+  const ok = p.crc === crc(p) && M.every(m => Number.isFinite(p[m.k]));
+  if (!ok) { S.rej++; return; }       // corrupted: dropped before it can touch charts or alerts
+  S.acc++; S.last = Date.now();
+  M.forEach(m => {
+    const w = win[m.k]; w.push(p[m.k]); if (w.length > 5) w.shift();
+    cur[m.k] = w.reduce((a, b) => a + b, 0) / w.length;  // moving average smoothing
+    hist[m.k].push(cur[m.k]); hist[m.k].shift();
+  });
+}
 
-  <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.5/dist/js/tabler.min.js"></script>
-  <script>
-    // Simulated data. Replace tick() with a feed from your telemetry API or WebSocket.
-    const LIGHT_DELAY_S = 1.3; // example one-way delay (Earth to Moon)
-    const metrics = [
-      { id: "alt",  name: "Altitude",         unit: "km",   v: 408,  step: 0.4,  min: 395, max: 420 },
-      { id: "vel",  name: "Velocity",         unit: "km/s", v: 7.66, step: 0.01, min: 7.5, max: 7.8 },
-      { id: "cab",  name: "Cabin pressure",   unit: "kPa",  v: 101,  step: 0.5,  min: 96,  max: 104 },
-      { id: "pwr",  name: "Battery charge",   unit: "%",    v: 82,   step: 1.2,  min: 25,  max: 100 },
-      { id: "tmp",  name: "Hull temperature", unit: "°C",   v: 21,   step: 0.8,  min: -10, max: 35 },
-      { id: "o2",   name: "Oxygen reserve",   unit: "%",    v: 94,   step: 0.3,  min: 30,  max: 100 }
-    ];
-    const history = {}; metrics.forEach(m => history[m.id] = Array(30).fill(m.v));
-    const lists = {
-      prelaunch: ["Fuel loaded and sealed", "Range safety cleared", "Crew suit checks complete", "Launch window confirmed"],
-      ascent:    ["Max-Q passed", "Stage separation confirmed", "Fairing jettison", "Orbital insertion burn"],
-      orbit:     ["Solar arrays deployed", "Antenna pointing verified", "Daily system diagnostics", "Crew exercise logged"],
-      reentry:   ["Deorbit burn planned", "Heat shield inspected", "Landing zone weather checked", "Recovery team on station"]
-    };
-    const state = { phase: "orbit", link: true, checks: {}, start: Date.now(), alerts: [] };
-    const $ = id => document.getElementById(id);
+// ---- Packet source: local simulator, or ?ws=ws://localhost:8000/ws with the same packet shape ----
+function tick() {
+  const p = (Date.now() - S.t0) / 1000;
+  if (S.phase === "reentry") {
+    const bo = p >= 27 && p <= 50;
+    if (bo !== S.bo) { S.bo = bo; updateLink(); }
+  }
+  const pkt = phys(S.phase, p); pkt.seq = ++S.seq; pkt.crc = crc(pkt);
+  if ($("corrupt").checked && Math.random() < .3) { pkt.alt = -999; pkt.prs = -999; }
+  route(pkt);
+}
+const wsUrl = new URLSearchParams(location.search).get("ws");
+if (wsUrl) { const ws = new WebSocket(wsUrl); ws.onmessage = e => route(JSON.parse(e.data)); }
+else setInterval(tick, 1000);
 
-    function tiles() {
-      $("tiles").innerHTML = metrics.map(m => `
-        <div class="col-sm-6 col-lg-4"><div class="card card-sm" id="t-${m.id}"><div class="card-body">
-          <div class="d-flex justify-content-between"><span class="text-secondary">${m.name}</span>
-            <span class="badge bg-warning-lt stale-tag">Last known</span></div>
-          <div class="big"><span class="val"></span> <span class="fs-4 text-secondary">${m.unit}</span></div>
-          <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points=""></polyline></svg>
-        </div></div></div>`).join("");
-    }
+// ---- Commands with light-delay round trip ----
+function cmdStatus(c) {
+  if (c.sentAt === null) return ["Queued, no link", "warning"];
+  const el = (Date.now() - c.sentAt) / 1000;
+  return el < .4 ? ["Sent", "secondary"] : el < DELAY * 2 ? ["In transit", "info"] : ["Confirmed", "success"];
+}
+const confirmed = ph => LISTS[ph].filter((_, i) => { const c = S.cmd[ph + i]; return c && c.v && cmdStatus(c)[0] === "Confirmed"; }).length;
 
-    function draw() {
-      state.alerts = [];
-      metrics.forEach(m => {
-        const t = $("t-" + m.id);
-        t.querySelector(".val").textContent = m.v.toFixed(m.step < 0.1 ? 2 : 1);
-        const h = history[m.id], lo = Math.min(...h), hi = Math.max(...h) || 1, rng = hi - lo || 1;
-        t.querySelector("polyline").setAttribute("points",
-          h.map((y, i) => `${(i / (h.length - 1)) * 120},${36 - ((y - lo) / rng) * 32}`).join(" "));
-        t.classList.toggle("stale", !state.link);
-        if (m.v < m.min || m.v > m.max) state.alerts.push(`${m.name} is ${m.v.toFixed(1)} ${m.unit}, outside ${m.min} to ${m.max}`);
-      });
-      $("alerts").innerHTML = state.alerts.length
-        ? state.alerts.map(a => `<div class="list-group-item"><span class="badge bg-danger me-2">Out of range</span>${a}</div>`).join("")
-        : `<div class="list-group-item text-secondary">No alerts. Values are within limits.</div>`;
-    }
+function setPhase(ph) {
+  S.phase = ph; S.t0 = Date.now(); S.bo = false; updateLink();
+  document.querySelectorAll(".phase-btn").forEach(b => b.classList.toggle("active", b.dataset.p === ph));
+  M.forEach(m => win[m.k] = []);
+}
 
-    function tick() {
-      if (!state.link) { draw(); return; } // hold last known values during dropout
-      metrics.forEach(m => {
-        m.v += (Math.random() - 0.5) * 2 * m.step;
-        history[m.id].push(m.v); history[m.id].shift();
-      });
-      draw();
-    }
+// ---- Render ----
+function render() {
+  const now = Date.now(), age = Math.round((now - S.last) / 1000), ph = S.phase;
+  Object.values(S.cmd).forEach(c => { if (c.sentAt === null && S.link) c.sentAt = now; });
+  const p = Math.floor((now - S.t0) / 1000), pad = n => String(n).padStart(2, "0");
+  $("met").textContent = `T+${pad(Math.floor(p / 60))}:${pad(p % 60)}`;
 
-    function checklist() {
-      const items = lists[state.phase];
-      $("checklist").innerHTML = items.map((t, i) => {
-        const k = state.phase + i;
-        return `<label class="list-group-item d-flex gap-3 align-items-center">
-          <input type="checkbox" class="form-check-input m-0" data-k="${k}" ${state.checks[k] ? "checked" : ""}>
-          <span>${t}</span></label>`;
-      }).join("");
-      const done = items.filter((_, i) => state.checks[state.phase + i]).length;
-      $("checkCount").textContent = `${done} of ${items.length} complete`;
-    }
+  $("tiles").innerHTML = M.map(m => {
+    const v = cur[m.k] ?? 0, name = m.k === "prs" ? prsName(ph) : m.n, h = hist[m.k];
+    const lo = Math.min(...h), rng = (Math.max(...h) - lo) || 1;
+    const pts = h.map((y, i) => `${i / 39 * 120},${36 - (y - lo) / rng * 32}`).join(" ");
+    const tag = !S.link ? `<span class="badge bg-warning-lt">STALE, last packet ${age}s ago</span>`
+              : S.replaying ? `<span class="badge bg-info-lt">Replaying</span>` : "";
+    return `<div class="col-sm-6 col-lg-4"><div class="card card-sm ${!S.link ? "stale" : S.replaying ? "replaying" : ""}"><div class="card-body">
+      <div class="d-flex justify-content-between"><span class="text-secondary">${name}</span>${tag}</div>
+      <div class="big">${v.toFixed(m.d)} <span class="fs-4 text-secondary">${m.u}</span></div>
+      <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points="${pts}"/></svg></div></div></div>`;
+  }).join("");
 
-    function setLink(up) {
-      state.link = up;
-      $("linkDot").className = "status-dot status-dot-animated " + (up ? "bg-success" : "bg-danger");
-      $("linkText").textContent = up ? `Link stable, ${LIGHT_DELAY_S}s one-way delay` : "Link lost";
-      $("staleBanner").classList.toggle("d-none", up);
-      $("dropBtn").textContent = up ? "Simulate comms dropout" : "Restore link";
-      draw();
-    }
+  const b = $("banner");
+  b.classList.toggle("d-none", S.link && !S.replaying);
+  b.className = "alert d-block " + (S.link ? "alert-info" : "alert-warning") + (S.link && !S.replaying ? " d-none" : "");
+  b.textContent = !S.link ? `${S.bo ? "Plasma blackout" : "Communications lost"}. Showing last known values; ${buf.length} packets buffered on the vehicle.`
+                          : `Link restored. Replaying ${buf.length} buffered packets onto the charts.`;
 
-    $("phases").addEventListener("click", e => {
-      const b = e.target.closest("button"); if (!b) return;
-      state.phase = b.dataset.p;
-      document.querySelectorAll(".phase-btn").forEach(x => x.classList.toggle("active", x === b));
-      checklist();
-    });
-    $("checklist").addEventListener("change", e => {
-      state.checks[e.target.dataset.k] = e.target.checked; checklist();
-    });
-    $("dropBtn").addEventListener("click", () => setLink(!state.link));
+  const ckHtml = LISTS[ph].map((t, i) => {
+    const k = ph + i, c = S.cmd[k];
+    let st = c ? cmdStatus(c) : ["Not complete", "secondary"];
+    if (c && !c.v && st[0] === "Confirmed") st = ["Not complete", "secondary"];
+    return `<label class="list-group-item d-flex gap-3 align-items-center">
+      <input type="checkbox" class="form-check-input m-0" data-k="${k}" ${c && c.v ? "checked" : ""}><span class="flex-fill">${t}</span>
+      ${st ? `<span class="badge bg-${st[1]}-lt">${st[0]}</span>` : ""}</label>`;
+  }).join("");
+  if (ckHtml !== S.ckHtml) { S.ckHtml = ckHtml; $("checklist").innerHTML = ckHtml; }
+  const n = confirmed(ph);
+  $("launch").classList.toggle("d-none", ph !== "prelaunch");
+  $("launch").disabled = n < 4;
+  $("launch").textContent = n < 4 ? `Launch locked (${n}/4 confirmed)` : "Authorize launch";
 
-    setInterval(() => {
-      const s = Math.floor((Date.now() - state.start) / 1000), p = n => String(n).padStart(2, "0");
-      $("met").textContent = `T+${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`;
-    }, 1000);
-    setInterval(tick, 1000);
+  const A = [];
+  if (S.bo) A.push(["warning", "Plasma blackout: telemetry interrupted"]);
+  else if (!S.link) A.push(["warning", "Comms lost: values are stale"]);
+  if (ph === "ascent" && cur.g > 3.4) A.push(["info", "Max-Q: peak aerodynamic load"]);
+  for (const k in LIM) { const [lo, hi] = LIM[k][ph] || LIM[k].all, v = cur[k];
+    if (v < lo || v > hi) A.push(["danger", `${M.find(m => m.k === k).n} ${v.toFixed(1)} outside ${lo} to ${hi}`]); }
+  $("alerts").innerHTML = A.length ? A.map(a => `<div class="list-group-item"><span class="badge bg-${a[0]} me-2">${a[0] === "danger" ? "Limit" : a[0] === "warning" ? "Comms" : "Info"}</span>${a[1]}</div>`).join("")
+    : `<div class="list-group-item text-secondary">No alerts. Values are within limits.</div>`;
 
-    tiles(); checklist(); setLink(true); tick();
-  </script>
+  $("stats").innerHTML = `<div class="d-flex justify-content-between"><span class="text-secondary">Accepted</span><b>${S.acc}</b></div>
+    <div class="d-flex justify-content-between"><span class="text-secondary">Rejected (checksum)</span><b class="${S.rej ? "text-danger" : ""}">${S.rej}</b></div>
+    <div class="d-flex justify-content-between"><span class="text-secondary">Buffered</span><b>${buf.length}</b></div>
+    <div class="text-secondary small mt-3">Bad packets are dropped before smoothing, so injected spikes never trigger alerts.</div>`;
+}
+
+$("phases").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setPhase(b.dataset.p); });
+$("checklist").addEventListener("change", e => {
+  const k = e.target.dataset.k;
+  S.cmd[k] = { v: e.target.checked, sentAt: S.link ? Date.now() : null };
+  render();
+});
+$("launch").addEventListener("click", () => setPhase("ascent"));
+$("dropBtn").addEventListener("click", () => { S.manual = !S.manual; updateLink(); });
+
+updateLink(); tick(); setInterval(render, 250);
+</script>
 </body>
 </html>
