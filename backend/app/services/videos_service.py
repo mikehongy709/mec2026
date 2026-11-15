@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.videos import Video
 from app.models.users import User
 
-from app.repositories.videos_repositories import VideoRepository
+from backend.app.repositories.status_repositories import VideoRepository
 
 from app.schemas.videos import VideoUpdateRequest
 

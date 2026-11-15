@@ -24,7 +24,7 @@ backend/.venv-local/bin/python -m uvicorn app.main:app --app-dir backend --host 
 
 Open **http://127.0.0.1:8080/docs** to try the API, or use the requests below. The server creates `backend/data/remnant.db` on first startup and seeds the eight supplies from the frontend sample mission. Subsequent startups preserve saved quantities. An optional `REMNANT_DB_PATH` environment variable selects another SQLite file.
 
-The Tabler frontend still runs its own sample data. This backend feature can be exercised independently before frontend integration.
+This inventory API runs separately from the RemnantMonitor telemetry dashboard and is not connected to that frontend. For the primary dashboard server and its API, follow the [root README](../README.md).
 
 ## List inventory
 
