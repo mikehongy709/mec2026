@@ -1,10 +1,11 @@
-import random
 from datetime import datetime
 
 from fastapi import HTTPException
 
+from app.models.mission import TelemetrySample
 from app.repositories.status_repositories import MissionStatusRepository
 from app.schemas.mission import DashboardResponse, Phase
+from app.telemetry import METRIC_DEFINITIONS
 
 
 PHASE_CHECKLISTS: dict[Phase, list[str]] = {
@@ -36,41 +37,22 @@ PHASE_CHECKLISTS: dict[Phase, list[str]] = {
 
 LINK_DELAY_SECONDS = 1.3
 
-METRIC_DEFINITIONS = [
-    {"id": "alt", "name": "Altitude", "unit": "km", "value": 408.0, "step": 0.4, "minimum": 395, "maximum": 420},
-    {"id": "vel", "name": "Velocity", "unit": "km/s", "value": 7.66, "step": 0.01, "minimum": 7.5, "maximum": 7.8},
-    {"id": "cab", "name": "Cabin pressure", "unit": "kPa", "value": 101.0, "step": 0.5, "minimum": 96, "maximum": 104},
-    {"id": "pwr", "name": "Battery charge", "unit": "%", "value": 82.0, "step": 1.2, "minimum": 25, "maximum": 100},
-    {"id": "tmp", "name": "Hull temperature", "unit": "°C", "value": 21.0, "step": 0.8, "minimum": -10, "maximum": 35},
-    {"id": "o2", "name": "Oxygen reserve", "unit": "%", "value": 94.0, "step": 0.3, "minimum": 30, "maximum": 100},
-]
-
-
 class StatusService:
     def __init__(self, repository: MissionStatusRepository):
         self.repository = repository
 
-    def get_dashboard(self, *, advance_telemetry: bool = True) -> DashboardResponse:
+    def get_dashboard(self) -> DashboardResponse:
         mission = self.repository.get_or_create()
         now = datetime.utcnow()
-        telemetry = dict(mission.telemetry or {})
+        telemetry = mission.telemetry or {}
         metrics = []
 
         for definition in METRIC_DEFINITIONS:
             saved = telemetry.get(definition["id"], {})
             value = float(saved.get("value", definition["value"]))
-            history = list(saved.get("history", [value] * 30))
-
-            # A dropped link holds the last reported values and history.
-            if advance_telemetry and mission.link:
-                value += (random.random() - 0.5) * 2 * definition["step"]
-                history = (history + [value])[-30:]
-                telemetry[definition["id"]] = {"value": value, "history": history}
+            history = list(saved.get("history") or [value] * 30)
 
             metrics.append({**definition, "value": value, "history": history})
-
-        if advance_telemetry and mission.link:
-            mission.telemetry = telemetry
 
         return DashboardResponse(
             phase=mission.phase,
@@ -84,10 +66,44 @@ class StatusService:
             updated_at=now,
         )
 
+    def ingest_telemetry(self, readings: dict[str, float]) -> TelemetrySample:
+        """Save one sample from the external generator and refresh the dashboard."""
+        mission = self.repository.get_or_create()
+        now = datetime.utcnow()
+        displayed_telemetry = dict(mission.telemetry or {})
+        for definition in METRIC_DEFINITIONS:
+            metric_id = definition["id"]
+            saved = displayed_telemetry.get(metric_id, {})
+            displayed_value = float(saved.get("value", definition["value"]))
+            history = list(saved.get("history") or [displayed_value] * 30)
+            if mission.link:
+                displayed_telemetry[metric_id] = {
+                    "value": readings[metric_id],
+                    "history": (history + [readings[metric_id]])[-30:],
+                }
+
+        # Store every received sample, but hold the last displayed value during
+        # a simulated link outage.
+        if mission.link:
+            mission.telemetry = displayed_telemetry
+        return self.repository.add_telemetry_sample(
+            phase=mission.phase,
+            link=mission.link,
+            checks=dict(mission.checks or {}),
+            readings=dict(readings),
+            recorded_at=now,
+        )
+
+    def get_latest_telemetry(self) -> TelemetrySample:
+        sample = self.repository.get_latest_telemetry_sample()
+        if sample is None:
+            raise HTTPException(status_code=404, detail="No telemetry samples have been received")
+        return sample
+
     def set_phase(self, phase: Phase) -> DashboardResponse:
         mission = self.repository.get_or_create()
         mission.phase = phase
-        return self.get_dashboard(advance_telemetry=False)
+        return self.get_dashboard()
 
     def set_checklist_item(self, phase: Phase, item_index: int, checked: bool) -> DashboardResponse:
         if item_index >= len(PHASE_CHECKLISTS[phase]):
@@ -97,9 +113,9 @@ class StatusService:
         checks = dict(mission.checks or {})
         checks[f"{phase}:{item_index}"] = checked
         mission.checks = checks
-        return self.get_dashboard(advance_telemetry=False)
+        return self.get_dashboard()
 
     def set_link(self, link: bool) -> DashboardResponse:
         mission = self.repository.get_or_create()
         mission.link = link
-        return self.get_dashboard(advance_telemetry=False)
+        return self.get_dashboard()

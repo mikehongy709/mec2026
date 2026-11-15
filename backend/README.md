@@ -1,5 +1,17 @@
 # Remnant inventory backend
 
+## Mission telemetry website
+
+The telemetry website and its API use `backend/main.py` and `backend/app.db`. From this directory, run:
+
+```sh
+uvicorn main:app --reload --port 8000
+```
+
+In another terminal, run `python data_generator.py` from this directory. It posts one telemetry sample per second. Open <http://localhost:8000/docs> to confirm you are using the **RemnantMonitor API**; the tables and samples are stored in `backend/app.db`.
+
+The inventory prototype documented below is a separate FastAPI app. Its `uvicorn app.main:app --app-dir backend` command uses `backend/data/remnant.db` and does not serve the mission telemetry dashboard.
+
 The first backend feature sets a supply's onboard quantity, saves it in SQLite, and returns its remaining supply days and shortage status. It uses the existing FastAPI, SQLAlchemy, and Pydantic dependencies.
 
 ## Run locally

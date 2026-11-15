@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.telemetry import METRIC_IDS
 
 
 Phase = Literal["prelaunch", "ascent", "orbit", "reentry"]
@@ -42,3 +44,27 @@ class ChecklistUpdate(BaseModel):
 
 class LinkUpdate(BaseModel):
     link: bool
+
+
+class TelemetryIngest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    readings: dict[str, Annotated[float, Field(allow_inf_nan=False)]]
+
+    @field_validator("readings")
+    @classmethod
+    def validate_reading_ids(cls, readings: dict[str, float]) -> dict[str, float]:
+        if set(readings) != METRIC_IDS:
+            raise ValueError("Readings must include exactly the supported metric IDs")
+        return readings
+
+
+class TelemetrySampleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    recorded_at: datetime
+    phase: Phase
+    link: bool
+    checks: dict[str, bool]
+    readings: dict[str, float]
