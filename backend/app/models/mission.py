@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, JSON, String
 
-from app.core.database import Base
+from app.database import Base
 
 
 class MissionState(Base):

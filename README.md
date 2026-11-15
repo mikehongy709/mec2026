@@ -9,10 +9,10 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
-Run `main:app` from the `backend` directory for the mission dashboard. `app.main:app` starts a separate inventory prototype and uses a different database. Open <http://localhost:8000>; FastAPI's interactive API page is at <http://localhost:8000/docs>.
+The backend has one FastAPI app: `app.main:app`. Open <http://localhost:8000>; FastAPI's interactive API page is at <http://localhost:8000/docs>.
 
 In a second terminal, start the simulator:
 
@@ -39,10 +39,4 @@ All dashboard operations use JSON under `/api`. `GET /api/dashboard` returns the
 
 The response includes `phase`, `link`, `link_delay_seconds`, `started_at`, `elapsed_seconds`, `metrics`, `checklist_items`, `checks`, and `updated_at`. Each metric has an `id`, display name, unit, current value, alert bounds, simulation step, and 30-value history. Checklist completion is keyed as `<phase>:<item_index>` in `checks`. Unsupported phases, malformed payloads, and checklist indexes outside the selected phase return a validation error.
 
-The first dashboard request initializes `backend/app.db` with example telemetry. Telemetry values are simulated by the backend and persisted between requests; the simulated comms dropout holds the last values. When serving the frontend from another local development server, it requests `http://localhost:8000` by default. Set `window.REMNANT_API_BASE` before the dashboard script to use another API origin.
-
-## Inventory API
-
-The repository also contains a standalone inventory API for saved supply quantities, remaining supply days, shortage alerts, and summary counts. See [inventory API setup and examples](backend/README.md).
-
-It runs separately using `app.main:app` on port 8080 with `backend/data/remnant.db`. Its routes are not mounted in the dashboard server described above.
+FastAPI creates the tables in `backend/app.db` at startup and logs the exact database path. The simulator runs separately and POSTs one sample per second. Each accepted sample is appended to `telemetry_samples`; the table is not truncated. During a simulated comms dropout, samples continue to be stored while the dashboard holds the last values received over the link. When serving the frontend from another local development server, it requests `http://localhost:8000` by default. Set `window.REMNANT_API_BASE` before the dashboard script to use another API origin.
